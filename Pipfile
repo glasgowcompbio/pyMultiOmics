@@ -1,0 +1,26 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+numpy = "*"
+scipy = "*"
+pandas = "*"
+seaborn = "*"
+scikit-learn = "*"
+matplotlib = "*"
+statsmodels = "*"
+loguru = "*"
+requests = "*"
+neo4j-driver = "*"
+tqdm = "*"
+pillow = "*"
+jupyterlab = "*"
+bioservices = "*"
+
+[dev-packages]
+twine = "*"
+
+[requires]
+python_version = "3"
