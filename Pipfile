@@ -18,6 +18,7 @@ tqdm = "*"
 pillow = "*"
 jupyterlab = "*"
 bioservices = "*"
+networkx = "*"
 
 [dev-packages]
 twine = "*"
