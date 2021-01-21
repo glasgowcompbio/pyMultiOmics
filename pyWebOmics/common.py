@@ -4,9 +4,10 @@ import math
 import os
 import pathlib
 import pickle
+import sys
 import zipfile
 
-import loguru as logger
+from loguru import logger
 import requests
 from tqdm import tqdm
 
@@ -73,3 +74,39 @@ def extract_zip_file(in_file, delete=True):
     if delete:
         logger.info('Deleting %s' % in_file)
         os.remove(in_file)
+
+
+def as_list(value):
+    if not type(value) == list:
+        value = [value]
+    return value
+
+
+def set_log_level(level, remove_id=None):
+    if remove_id is None:
+        try:
+            logger.remove(0)  # try to remove the default handler with id 0
+        except ValueError:  # no default handler has been set
+            pass
+    else:
+        logger.remove(remove_id)  # remove previously set handler by id
+
+    # add new handler at the desired log level
+    new_handler_id = logger.add(sys.stderr, level=level)
+    return new_handler_id
+
+
+def set_log_level_warning(remove_id=None):
+    return set_log_level(logging.WARNING, remove_id=remove_id)
+
+
+def set_log_level_info(remove_id=None):
+    return set_log_level(logging.INFO, remove_id=remove_id)
+
+
+def set_log_level_debug(remove_id=None):
+    return set_log_level(logging.DEBUG, remove_id=remove_id)
+
+
+def add_log_file(log_path, level):
+    logger.add(log_path, level=level)
