@@ -5,7 +5,7 @@ from loguru import logger
 
 from .common import as_list
 from .constants import REACTIONS, PROTEOMICS, METABOLOMICS, GENOMICS, TRANSCRIPTOMICS, PATHWAYS, DataTypeDict
-from .reactome import uniprot_to_reaction, compound_to_reaction
+from .reactome import uniprot_to_reaction, compound_to_reaction, ensembl_to_uniprot
 
 
 class Mapper():
@@ -47,15 +47,23 @@ class Mapper():
         self.G = nx.Graph()
         all_reactions = []
 
+        transcript_results = None
+        if self.has_transcript:
+            transcript_ids = list(self.transcript_df.index.values)
+            self._add_nodes(transcript_ids, TRANSCRIPTOMICS, observed=True)
+            transcript_results, _ = ensembl_to_uniprot(transcript_ids, self.species_list)
+
         protein_results = None
         if self.has_protein:
             protein_ids = list(self.protein_df.index.values)
+            self._add_nodes(protein_ids, PROTEOMICS, observed=True)
             protein_results, _ = uniprot_to_reaction(protein_ids, self.species_list)
             all_reactions.extend(list(protein_results.values()))
 
         compound_results = None
         if self.has_compound:
             compound_ids = list(self.compound_df.index.values)
+            self._add_nodes(compound_ids, METABOLOMICS, observed=True)
             compound_results, _ = compound_to_reaction(compound_ids, self.species_list)
             all_reactions.extend(list(compound_results.values()))
 
@@ -68,11 +76,10 @@ class Mapper():
             reaction_name = reaction['reaction_name']
             self.G.add_node(reaction_id, name=reaction_name, type=REACTIONS)
 
-        # add nodes and edges for proteins
-        self._add_reaction_edges(protein_results, PROTEOMICS)
-
-        # add nodes and edges for compounds
-        self._add_reaction_edges(compound_results, METABOLOMICS)
+        # add edges based on mapping results
+        self._add_edges(transcript_results)
+        self._add_edges(protein_results, dest_key='reaction_id')
+        self._add_edges(compound_results, dest_key='reaction_id')
 
         logger.info('Created a multi-omics network with %d nodes and %d edges' %
                     (len(self.G.nodes), len(self.G.edges)))
@@ -87,6 +94,9 @@ class Mapper():
 
         # need to filter
         # below, node[0] is the id, while node[1] is the data dict
+        for node in nodes:
+            if 'type' not in node[1]:
+                print(node)
         results = filter(lambda node: node[1]['type'] in types, nodes)
         return list(results)
 
@@ -96,44 +106,68 @@ class Mapper():
         results = {DataTypeDict[t]: len(self.get_nodes(types=t)) for t in types}
         return results
 
-    def get_neighbours(self, query_id, types=None):
-        nbs = list(self.G.neighbors(query_id))
-        if types is None:
-            return nbs
-        types = as_list(types)
+    def get_neighbours(self, query_id, types_include=None, types_exclude=None):
+        results = list(self.G.neighbors(query_id))
 
-        # need to filter by filter_types
-        results = filter(lambda nb: self.G.nodes[nb]['type'] in types, nbs)
+        # filter for types to be included
+        if types_include is not None:
+            types_include = as_list(types_include)
+            results = filter(lambda node: self.get_node_type(node) in types_include, results)
+
+        # filter for types to be excluded
+        if types_exclude is not None:
+            types_exclude = as_list(types_exclude)
+            results = filter(lambda node: self.get_node_type(node) not in types_exclude, results)
+
         return list(results)
 
-    def get_connected(self, query_id, source_type, target_type):
-        assert source_type in [PROTEOMICS, METABOLOMICS, REACTIONS]
-        assert target_type in [PROTEOMICS, METABOLOMICS, REACTIONS]
+    def get_node_type(self, node):
+        return self.G.nodes[node]['type']
+
+    def get_connected(self, query_id, dest_type):
+        visited = []  # list of visited nodes
+        queue = []  # nodes to process next
+        seen_types = set()  # omics type seen so far
+
+        visited.append(query_id)
+        queue.append(query_id)
+
         results = []
+        path = []
+        while queue:
+            s = queue.pop(0)
+            node_type = self.get_node_type(s)
+            seen_types.add(node_type)
+            path.append((s, node_type))
 
-        # get anything that is directly connected to reactions (single-hop in the graph)
-        if source_type == REACTIONS or target_type == REACTIONS:
-            results = self.get_neighbours(query_id, types=target_type)
+            if node_type == dest_type:
+                # terminate search for s
+                results.append(s)
+                continue
+            else:
+                # keep searching in the neighbours of s
+                # but exclude nodes of type that we've seen before
+                neighbours = self.get_neighbours(s, types_exclude=seen_types)
+                for node in neighbours:
+                    if node not in visited:
+                        visited.append(node)
+                        queue.append(node)
 
-        # get connections between entites that need to go through reactions
-        elif source_type in [PROTEOMICS, METABOLOMICS] and target_type in [PROTEOMICS, METABOLOMICS]:
+        return {
+            'results': results,
+            'path': path
+        }
 
-            # get neighbouring reactions of the query_id node
-            nb_reactions = self.get_neighbours(query_id, types=REACTIONS)
+    def _add_nodes(self, entity_ids, node_type, observed=True):
+        for entity_id in entity_ids:
+            self.G.add_node(entity_id, type=node_type, obs=observed)
 
-            # get neighbouring entities of all the reactions that are of target_type
-            for reaction in nb_reactions:
-                nb_entities = self.get_neighbours(reaction, types=target_type)
-                results.extend(nb_entities)
+    def _add_edges(self, query_results, dest_key=None):
+        for source_id in query_results:
+            destinations = query_results[source_id]
+            for dest in destinations:
+                dest_id = dest[dest_key] if dest_key is not None else dest
 
-        # return unique results
-        return list(set(results))
-
-    def _add_reaction_edges(self, query_results, node_type):
-        for entity_id in query_results:
-            self.G.add_node(entity_id, type=node_type)
-
-            entity_reactions = query_results[entity_id]
-            for reaction in entity_reactions:
-                reaction_id = reaction['reaction_id']
-                self.G.add_edge(entity_id, reaction_id)
+                # only add edges between nodes that already exist (have been added before)
+                if source_id in self.G.nodes and dest_id in self.G.nodes:
+                    self.G.add_edge(source_id, dest_id)
