@@ -28,4 +28,4 @@ m = Mapper(species_name) \
 ```
 
 `m` contains a mapper object, which can be interogated to obtain the data integration results. 
-Please refer to this notebook for a demo.
+Please refer to [this notebook](https://github.com/glasgowcompbio/pyMultiOmics/blob/main/notebooks/zebrafish_demo.ipynb) for a demo.
