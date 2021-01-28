@@ -6,35 +6,61 @@ from io import StringIO
 
 import numpy as np
 import pandas as pd
-from linker.common import load_obj
-from linker.constants import COMPOUND_DATABASE_CHEBI, EXTERNAL_KEGG_TO_CHEBI, GENE_PK, PROTEIN_PK, REACTION_PK, \
+from loguru import logger
+
+from .common import load_obj
+from .constants import COMPOUND_DATABASE_CHEBI, EXTERNAL_KEGG_TO_CHEBI, GENE_PK, PROTEIN_PK, REACTION_PK, \
     COMPOUND_PK, PATHWAY_PK, COMPOUND_DATABASE_KEGG, NA, EXTERNAL_GENE_NAMES, EXTERNAL_COMPOUND_NAMES, GENOMICS, \
     PROTEOMICS, METABOLOMICS, REACTIONS, PATHWAYS, GENES_TO_PROTEINS, PROTEINS_TO_REACTIONS, COMPOUNDS_TO_REACTIONS, \
     REACTIONS_TO_PATHWAYS, IDENTIFIER_COL, PIMP_PEAK_ID_COL, GROUP_COL, DEFAULT_GROUP_NAME, PADJ_COL_PREFIX, \
     FC_COL_PREFIX, SAMPLE_COL
-from linker.metadata import get_gene_names, get_compound_metadata, clean_label
-from linker.reactome import ensembl_to_uniprot, uniprot_to_reaction, compound_to_reaction, \
+from .metadata import get_gene_names, get_compound_metadata, clean_label
+from .reactome import ensembl_to_uniprot, uniprot_to_reaction, compound_to_reaction, \
     reaction_to_pathway, reaction_to_uniprot, reaction_to_compound, uniprot_to_ensembl
-from loguru import logger
 
 Relation = collections.namedtuple('Relation', 'keys values mapping_list')
 
+from pyMultiOmics.constants import IDENTIFIER_COL
 
-def reactome_mapping(genes_str, proteins_str, compounds_str, compound_database_str, species_list,
-                     metabolic_pathway_only):
+
+def prepare_input(data_df):
+    if data_df is None:
+        return None
+
+    # remove index, since all our old codes below assume this
+    data_df = data_df.reset_index()
+
+    # always set the first column to be the Identifier column
+    rename = {data_df.columns.values[0]: IDENTIFIER_COL}
+    data_df = data_df.rename(columns=rename)
+
+    # assume id is in the first column and is a string
+    data_df.iloc[:, 0] = data_df.iloc[:, 0].astype(str)
+    return data_df
+
+
+def reactome_mapping(observed_gene_df, observed_protein_df, observed_compound_df,
+                     compound_database_str, species_list, metabolic_pathway_only):
+
+    observed_gene_df = prepare_input(observed_gene_df)
+    observed_protein_df = prepare_input(observed_protein_df)
+    observed_compound_df = prepare_input(observed_compound_df)
+
     ### all the ids that we have from the user ###
-    observed_gene_df, group_gene_df, observed_gene_ids = csv_to_dataframe(genes_str)
-    observed_protein_df, group_protein_df, observed_protein_ids = csv_to_dataframe(proteins_str)
-    observed_compound_df, group_compound_df, observed_compound_ids = csv_to_dataframe(compounds_str)
+    observed_gene_ids = get_ids_from_dataframe(observed_gene_df)
+    observed_protein_ids = get_ids_from_dataframe(observed_protein_df)
+    observed_compound_ids = get_ids_from_dataframe(observed_compound_df)
 
     # try to convert all kegg ids to chebi ids, if possible
-    logger.info('Converting kegg ids -> chebi ids')
-    observed_compound_ids = get_ids_from_dataframe(observed_compound_df)
     KEGG_2_CHEBI = load_obj(EXTERNAL_KEGG_TO_CHEBI)
+    not_found = []
     for cid in observed_compound_ids:
         if cid not in KEGG_2_CHEBI:
-            logger.warning('Not found: %s' % cid)
+            not_found.append(cid)
             KEGG_2_CHEBI[cid] = cid
+
+    if len(not_found) > 0:
+        logger.debug('Not found: %d when converting kegg -> chebi ids' % len(not_found))
 
     if observed_compound_df is not None:
         if compound_database_str == COMPOUND_DATABASE_CHEBI:
@@ -62,7 +88,7 @@ def reactome_mapping(genes_str, proteins_str, compounds_str, compound_database_s
                                           value_key='reaction_id')
 
     ### maps reactions -> metabolite pathways ###
-    logger.info('Mapping reactions -> metabolite pathways')
+    logger.info('Mapping reactions -> pathways')
     reaction_ids_from_proteins = protein_2_reactions.values
     reaction_ids_from_compounds = compound_2_reactions.values
     reaction_ids = list(set(reaction_ids_from_proteins + reaction_ids_from_compounds))
@@ -188,9 +214,6 @@ def reactome_mapping(genes_str, proteins_str, compounds_str, compound_database_s
         PROTEINS_TO_REACTIONS: protein_2_reactions_json,
         COMPOUNDS_TO_REACTIONS: compound_2_reactions_json,
         REACTIONS_TO_PATHWAYS: reaction_2_pathways_json,
-        'group_gene_df': group_gene_df,
-        'group_protein_df': group_protein_df,
-        'group_compound_df': group_compound_df
     }
     return results
 
