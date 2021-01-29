@@ -7,7 +7,7 @@ from loguru import logger
 from .common import as_list
 from .constants import REACTIONS, PROTEOMICS, METABOLOMICS, GENOMICS, TRANSCRIPTOMICS, PATHWAYS, DataTypeDict, \
     COMPOUND_DATABASE_CHEBI, MAPPING, PKS, IDS, NA, GENES_TO_PROTEINS, PROTEINS_TO_REACTIONS, COMPOUNDS_TO_REACTIONS, \
-    REACTIONS_TO_PATHWAYS
+    REACTIONS_TO_PATHWAYS, GENES, PROTEINS, COMPOUNDS, TRANSCRIPTS
 from .functions import reactome_mapping
 
 
@@ -18,7 +18,6 @@ class Mapper():
         self.compound_database_str = compound_database_str
 
         self.G = None
-        self.G_complete = None
 
         self.gene_df = None
         self.gene_design = None
@@ -55,34 +54,37 @@ class Mapper():
             METABOLOMICS: self.compound_design
         }
 
-        # create network graphs
-        # G_complete contains both types of nodes:
-        # - actual: only the genes, proteins and compounds actually observed in the data
-        # - inferred: other entities (genes, proteins and compounds) not observed in the data, but linked through
-        #   their reactions to the actual nodes
+        # create network graphs, can be retrieved using self._get_graph()
         self.G = nx.Graph()
-        self.G_complete = nx.Graph()
 
         # add nodes and edges from mapping results to the graph
-        self._add_nodes(self.G, self.G_complete, results, designs)
-        self._add_edges(self.G, self.G_complete, results)
-        self._cleanup(self.G, self.G_complete)
+        self._add_nodes(results, designs)
+        self._add_edges(results)
+        self._cleanup()
 
         logger.info('Created a multi-omics network with %d nodes and %d edges' %
                     (len(self.G.nodes), len(self.G.edges)))
         logger.info('node_counts = %s' % self.num_nodes())
         return self
 
-    def get_node(self, node_id, complete=False):
-        graph = self._get_graph(complete)
+    def get_node(self, node_id):
+        graph = self._get_graph()
         return graph.nodes[node_id]
 
-    def get_node_type(self, node_id, complete=False):
-        node = self.get_node(node_id, complete=complete)
+    def get_node_type(self, node_id):
+        node = self.get_node(node_id)
         return node['data_type']
 
-    def get_nodes(self, types=None, complete=False):
-        graph = self._get_graph(complete)
+    def get_display_name(self, node_id):
+        node = self.get_node(node_id)
+        return node['display_name']
+
+    def is_observed(self, node_id):
+        node = self.get_node(node_id)
+        return node['observed']
+
+    def get_nodes(self, types=None):
+        graph = self._get_graph()
         nodes = list(graph.nodes(data=True))
         if types is None:
             return nodes
@@ -93,31 +95,57 @@ class Mapper():
         results = filter(lambda node: node[1]['data_type'] in types, nodes)
         return list(results)
 
-    def num_nodes(self, types=None, complete=False):
+    def num_nodes(self, types=None):
         if types is None:
             types = [GENOMICS, TRANSCRIPTOMICS, PROTEOMICS, METABOLOMICS, REACTIONS, PATHWAYS]
         else:
             types = as_list(types)
-        results = {DataTypeDict[t]: len(self.get_nodes(types=t, complete=complete)) for t in types}
+        results = {DataTypeDict[t]: len(self.get_nodes(types=t)) for t in types}
         return results
 
-    def get_neighbours(self, query_id, include_types=None, exclude_types=None, complete=False):
-        graph = self._get_graph(complete)
+    def get_neighbours(self, query_id, include_types=None, exclude_types=None):
+        graph = self._get_graph()
         results = list(graph.neighbors(query_id))
 
         # filter for types to be included
         if include_types is not None:
             include_types = as_list(include_types)
-            results = filter(lambda node: self.get_node_type(node, complete=complete) in include_types, results)
+            results = filter(lambda node: self.get_node_type(node) in include_types, results)
 
         # filter for types to be excluded
         if exclude_types is not None:
             exclude_types = as_list(exclude_types)
-            results = filter(lambda node: self.get_node_type(node, complete=complete) not in exclude_types, results)
+            results = filter(lambda node: self.get_node_type(node) not in exclude_types, results)
 
         return list(results)
 
-    def get_connected(self, query_id, dest_type, complete=False):
+    def get_connected(self, query_id, dest_type=None, observed=None):
+        dest_types = as_list(dest_type) if dest_type is not None else [GENES, TRANSCRIPTS,
+                                                                PROTEINS, COMPOUNDS,
+                                                                REACTIONS, PATHWAYS]
+        possible_obs = as_list(observed) if observed is not None else [True, False]
+
+        data = []
+        for data_type in dest_types:
+            connected = self._search_graph(query_id, data_type)
+            for node_id in connected:
+                if node_id == query_id:
+                    continue
+                node_info = self.get_node(node_id)
+                display_name = node_info['display_name']
+                obs = self.is_observed(node_id)
+                row = [node_id, display_name, MAPPING[data_type], obs]
+
+                if obs is None: # reactions, pathways don't have any observed value
+                    data.append(row)
+                elif obs in possible_obs: # everything else
+                    data.append(row)
+
+        df = pd.DataFrame(data, columns=['entity_id', 'display_name', 'data_type', 'observed'])
+        df.set_index('entity_id')
+        return df
+
+    def _search_graph(self, query_id, dest_type):
         visited = []  # list of visited nodes
         queue = []  # nodes to process next
         seen_types = set()  # omics type seen so far
@@ -128,7 +156,7 @@ class Mapper():
         results = []
         while queue:
             s = queue.pop(0)
-            node_type = self.get_node_type(s, complete=complete)
+            node_type = self.get_node_type(s)
             seen_types.add(node_type)
 
             if node_type == dest_type:
@@ -138,16 +166,15 @@ class Mapper():
             else:
                 # keep searching in the neighbours of s
                 # but exclude nodes of type that we've seen before
-                neighbours = self.get_neighbours(s, exclude_types=seen_types, complete=complete)
+                neighbours = self.get_neighbours(s, exclude_types=seen_types)
                 for node in neighbours:
                     if node not in visited:
                         visited.append(node)
                         queue.append(node)
         return results
 
-    def _get_graph(self, complete):
-        graph = self.G_complete if complete else self.G
-        return graph
+    def _get_graph(self):
+        return self.G
 
     def _json_str_to_df(self, json_str):
         res = json.loads(json_str)
@@ -165,11 +192,13 @@ class Mapper():
         new_s = pd.Series(new_dict)
         return new_s
 
-    def _insert_edge_if_node_exists(self, graph, source_id, dest_id):
+    def _insert_edge_if_node_exists(self, source_id, dest_id):
+        graph = self._get_graph()
         if source_id in graph.nodes and dest_id in graph.nodes:
             graph.add_edge(source_id, dest_id)
 
-    def _add_nodes(self, G, G_complete, results, designs):
+    def _add_nodes(self, results, designs):
+        graph = self._get_graph()
         data_types = [GENOMICS, PROTEOMICS, METABOLOMICS, REACTIONS, PATHWAYS]
         for data_type in data_types:
 
@@ -199,12 +228,14 @@ class Mapper():
                     continue
 
                 # select only sample names columns to get the measurements
-                measurements = self._filter_series(row, sample_names)
+                observed = row['obs']
+                measurements = None
+                if observed:
+                    measurements = self._filter_series(row, sample_names)
 
                 # create node info dictionary
-                observed = row['obs']
                 node_info = {
-                    'obs': observed,
+                    'observed': observed,
                     'display_name': row[name_col],
                     'data_type': data_type,
                     'display_data_type': display_data_type,
@@ -214,18 +245,9 @@ class Mapper():
                 # insert node into two separate graphs: G and G_complete
                 # G_complete contains both actual and inferred nodes
                 # G contains only the actual nodes
-                G_complete.add_node(identifier, **node_info)
-                if data_type in [REACTIONS, PATHWAYS]:
-                    # for reactions, pathways, observed is always None
-                    # so we just insert them anyway
-                    G.add_node(identifier, **node_info)
-                else:
-                    # for other data type, e.g. genes, proteins, compounds
-                    # make sure it's observed before adding them to G
-                    if observed:
-                        G.add_node(identifier, **node_info)
+                graph.add_node(identifier, **node_info)
 
-    def _add_edges(self, G, G_complete, results):
+    def _add_edges(self, results):
         data_types = [GENES_TO_PROTEINS, PROTEINS_TO_REACTIONS, COMPOUNDS_TO_REACTIONS, REACTIONS_TO_PATHWAYS]
         for data_type in data_types:
             display_data_type = MAPPING[data_type]
@@ -236,15 +258,12 @@ class Mapper():
                 source_id, dest_id = row.values.tolist()
 
                 # only add edges between nodes that already exist (have been added before)
-                self._insert_edge_if_node_exists(G, source_id, dest_id)
-                self._insert_edge_if_node_exists(G_complete, source_id, dest_id)
+                self._insert_edge_if_node_exists(source_id, dest_id)
 
-    def _cleanup(self, G, G_complete):
+    def _cleanup(self):
 
-        # get all reactions nodes from the incomplete graph
-        complete = False
-        reactions = self.get_nodes(types=REACTIONS, complete=complete)
-
+        # get all reactions nodes from the graph
+        reactions = self.get_nodes(types=REACTIONS)
         to_delete = []
         for reaction_id, reaction_data in reactions:
             # FIXME: we shouldn't need to do this?
@@ -258,23 +277,6 @@ class Mapper():
                 to_delete.append(reaction_id)
 
         logger.debug('Deleting %d reactions that should not be there' % len(to_delete))
-        graph = self._get_graph(True)
+        logger.debug(to_delete[0:100])
+        graph = self._get_graph()
         graph.remove_nodes_from(to_delete)
-        graph = self._get_graph(False)
-        graph.remove_nodes_from(to_delete)
-
-        self._delete_disconnected_nodes(True)
-        self._delete_disconnected_nodes(False)
-
-    def _delete_disconnected_nodes(self, complete):
-        logger.debug('complete = %s' % complete)
-        for type in [PATHWAYS, REACTIONS, PROTEOMICS, METABOLOMICS, TRANSCRIPTOMICS, GENOMICS]:
-            nodes = self.get_nodes(types=type, complete=complete)
-            to_delete = []
-            for node_id, node_data in nodes:
-                if len(self.get_neighbours(node_id, complete=complete)) == 0:
-                    to_delete.append(node_id)
-
-            logger.debug('Deleted %d disconnected nodes of type %d' % (len(to_delete), type))
-            graph = self._get_graph(complete)
-            graph.remove_nodes_from(to_delete)
