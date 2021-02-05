@@ -110,3 +110,4 @@ FACTOR_COL = 'factor'
 DEFAULT_GROUP_NAME = 'default'
 
 PIMP_PEAK_ID_COL = 'Peak id'
+SMALL = 1E-6
