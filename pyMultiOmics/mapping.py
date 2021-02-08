@@ -43,6 +43,20 @@ class Mapper():
         self.compound_design = compound_design
         return self
 
+    def get_dfs(self, data_type):
+        data_df = None
+        design_df = None
+        if data_type == GENOMICS:
+            data_df = self.gene_df
+            design_df = self.gene_design
+        elif data_type == PROTEOMICS:
+            data_df = self.protein_df
+            design_df = self.protein_design
+        elif data_type == METABOLOMICS:
+            data_df = self.compound_df
+            design_df = self.compound_design
+        return data_df, design_df
+
     def build(self):
 
         # map different omics entities to reactome
@@ -121,8 +135,8 @@ class Mapper():
 
     def get_connected(self, query_id, dest_type=None, observed=None):
         dest_types = as_list(dest_type) if dest_type is not None else [GENES, TRANSCRIPTS,
-                                                                PROTEINS, COMPOUNDS,
-                                                                REACTIONS, PATHWAYS]
+                                                                       PROTEINS, COMPOUNDS,
+                                                                       REACTIONS, PATHWAYS]
         possible_obs = as_list(observed) if observed is not None else [True, False]
 
         data = []
@@ -136,13 +150,13 @@ class Mapper():
                 obs = self.is_observed(node_id)
                 row = [node_id, display_name, MAPPING[data_type], obs]
 
-                if obs is None: # reactions, pathways don't have any observed value
+                if obs is None:  # reactions, pathways don't have any observed value
                     data.append(row)
-                elif obs in possible_obs: # everything else
+                elif obs in possible_obs:  # everything else
                     data.append(row)
 
         df = pd.DataFrame(data, columns=['entity_id', 'display_name', 'data_type', 'observed'])
-        df.set_index('entity_id')
+        df = df.set_index('entity_id')
         return df
 
     def _search_graph(self, query_id, dest_type):
