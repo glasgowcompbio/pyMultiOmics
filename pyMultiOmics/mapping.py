@@ -9,6 +9,7 @@ from .constants import REACTIONS, PROTEOMICS, METABOLOMICS, GENOMICS, TRANSCRIPT
     COMPOUND_DATABASE_CHEBI, MAPPING, PKS, IDS, NA, GENES_TO_PROTEINS, PROTEINS_TO_REACTIONS, COMPOUNDS_TO_REACTIONS, \
     REACTIONS_TO_PATHWAYS, GENES, PROTEINS, COMPOUNDS, TRANSCRIPTS
 from .functions import reactome_mapping
+from .query import QueryBuilder, SingleEntity, Connected
 
 
 class Mapper():
@@ -134,58 +135,18 @@ class Mapper():
         return list(results)
 
     def get_connected(self, query_id, dest_type=None, observed=None):
-        dest_types = as_list(dest_type) if dest_type is not None else [GENES, TRANSCRIPTS,
-                                                                       PROTEINS, COMPOUNDS,
-                                                                       REACTIONS, PATHWAYS]
-        possible_obs = as_list(observed) if observed is not None else [True, False]
-
-        data = []
-        for data_type in dest_types:
-            connected = self._search_graph(query_id, data_type)
-            for node_id in connected:
-                if node_id == query_id:
-                    continue
-                node_info = self.get_node(node_id)
-                display_name = node_info['display_name']
-                obs = self.is_observed(node_id)
-                row = [node_id, display_name, MAPPING[data_type], obs]
-
-                if obs is None:  # reactions, pathways don't have any observed value
-                    data.append(row)
-                elif obs in possible_obs:  # everything else
-                    data.append(row)
-
-        df = pd.DataFrame(data, columns=['entity_id', 'display_name', 'data_type', 'observed'])
-        df = df.set_index('entity_id')
-        return df
-
-    def _search_graph(self, query_id, dest_type):
-        visited = []  # list of visited nodes
-        queue = []  # nodes to process next
-        seen_types = set()  # omics type seen so far
-
-        visited.append(query_id)
-        queue.append(query_id)
-
-        results = []
-        while queue:
-            s = queue.pop(0)
-            node_type = self.get_node_type(s)
-            seen_types.add(node_type)
-
-            if node_type == dest_type:
-                # terminate search for s
-                results.append(s)
-                continue
-            else:
-                # keep searching in the neighbours of s
-                # but exclude nodes of type that we've seen before
-                neighbours = self.get_neighbours(s, exclude_types=seen_types)
-                for node in neighbours:
-                    if node not in visited:
-                        visited.append(node)
-                        queue.append(node)
-        return results
+        """
+        Retrieve mapped entities that are connected to query_id
+        :param query_id: the node ID to query
+        :param dest_type: connected entity types, e.g. GENES, PROTEINS, COMPOUNDS, REACTIONS, PATHWAYS
+        :param observed: True to get entities observed in the data, False to retrieve everything mapped by Reactome
+        :return: a dataframe of connected entities
+        """
+        res = QueryBuilder(self) \
+            .add(SingleEntity(query_id)) \
+            .add(Connected(dest_type=dest_type, observed=observed)) \
+            .run()
+        return res
 
     def _get_graph(self):
         return self.G
