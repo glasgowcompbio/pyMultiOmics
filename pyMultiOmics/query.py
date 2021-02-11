@@ -25,21 +25,30 @@ class Query():
         raise NotImplementedError
 
 
-class SingleEntity(Query):
-    def __init__(self, node_id):
-        self.node_id = node_id
+class Entity(Query):
+    def __init__(self, node_ids):
+        self.node_ids = as_list(node_ids)
 
     def run(self, mapping, previous_res):
-        node_id = self.node_id
-        node_info = mapping.get_node(node_id)
-        display_name = node_info['display_name']
-        obs = mapping.is_observed(node_id)
-        data_type = mapping.get_node_type(node_id)
-        row = [node_id, display_name, MAPPING[data_type], obs]
-        data = [row]
+        data = []
+        for node_id in self.node_ids:
+            node_info = mapping.get_node(node_id)
+            display_name = node_info['display_name']
+            obs = mapping.is_observed(node_id)
+            data_type = mapping.get_node_type(node_id)
+            row = [node_id, display_name, MAPPING[data_type], obs]
+            data.append(row)
         df = pd.DataFrame(data, columns=['entity_id', 'display_name', 'data_type', 'observed'])
         df = df.set_index('entity_id')
         return df
+
+
+class Select(Query):
+    def __init__(self, data_types):
+        self.data_types = as_list(data_types)
+
+    def run(self, mapping, previous_res):
+        pass
 
 
 class Connected(Query):

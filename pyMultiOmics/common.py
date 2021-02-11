@@ -77,12 +77,15 @@ def extract_zip_file(in_file, delete=True):
 
 
 def as_list(value):
-    try:
-        iter(value)
-    except TypeError: # not iterable
+    if isinstance(value, str): # if string turn this into a list item
         value = [value]
-    else: # iterable
-        value = list(value)
+    else: # other types, check if  they're iterable
+        try:
+            iter(value)
+        except TypeError: # not iterable
+            value = [value]
+        else: # iterable
+            value = list(value)
     return value
 
 
