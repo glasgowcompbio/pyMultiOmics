@@ -174,9 +174,7 @@ class WebOmicsInference(object):
         # if there's a negative number, assume the data has been logged, so don't do it again
         log = np.all(count_data.values >= 0)
 
-        from rpy2.robjects.packages import importr
         from rpy2 import robjects as ro
-        from rpy2.robjects import Formula
         from rpy2.robjects import pandas2ri
 
         pandas2ri.activate()

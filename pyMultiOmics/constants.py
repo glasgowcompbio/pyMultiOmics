@@ -126,3 +126,9 @@ INFERENCE_LIMMA = 8
 INFERENCE_REACTOME = 9
 
 T_TEST_THRESHOLD = 0.05
+
+QUERY_ENTITY_ID = 'entity_id'
+QUERY_OBSERVED = 'observed'
+QUERY_DATA_TYPE = 'data_type'
+QUERY_NODE_ID = 'node_id'
+QUERY_DISPLAY_NAME = 'display_name'

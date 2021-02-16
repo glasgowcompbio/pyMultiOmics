@@ -7,9 +7,9 @@ from loguru import logger
 from .common import as_list
 from .constants import REACTIONS, PROTEOMICS, METABOLOMICS, GENOMICS, TRANSCRIPTOMICS, PATHWAYS, DataTypeDict, \
     COMPOUND_DATABASE_CHEBI, MAPPING, PKS, IDS, NA, GENES_TO_PROTEINS, PROTEINS_TO_REACTIONS, COMPOUNDS_TO_REACTIONS, \
-    REACTIONS_TO_PATHWAYS, GENES, PROTEINS, COMPOUNDS, TRANSCRIPTS
+    REACTIONS_TO_PATHWAYS
 from .functions import reactome_mapping
-from .query import QueryBuilder, SingleEntity, Connected
+from .query import QueryBuilder, Connected
 
 
 class Mapper():
@@ -144,7 +144,7 @@ class Mapper():
         """
         res = QueryBuilder(self) \
             .add(SingleEntity(query_id)) \
-            .add(Connected(dest_type=dest_type, observed=observed)) \
+            .add(Connected(data_type=dest_type, observed=observed)) \
             .run()
         return res
 
