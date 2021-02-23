@@ -1,8 +1,11 @@
-# import pylab as plt
-
 import numpy as np
 import pandas as pd
 from loguru import logger
+from rpy2 import robjects as ro
+from rpy2.robjects import Formula
+from rpy2.robjects import pandas2ri
+from rpy2.robjects.conversion import localconverter
+from rpy2.robjects.packages import importr
 from scipy import stats
 from sklearn import preprocessing
 from sklearn.decomposition import PCA
@@ -12,7 +15,7 @@ from .constants import GROUP_COL, IDS, PKS
 
 
 class WebOmicsInference(object):
-    def __init__(self, data_df, design_df, data_type, remove_cols=None, min_value=0):
+    def __init__(self, data_df, design_df, data_type, remove_cols=None, min_value=0, replace_mean=True):
 
         data_df = data_df.copy()
 
@@ -34,7 +37,7 @@ class WebOmicsInference(object):
         # data imputation:
         # - if all zero in group then replace with min_value
         # - replace any other zeros with mean of group
-        self._impute_data(min_value)
+        self._impute_data(min_value, replace_mean=replace_mean)
 
     # def heatmap(self, N=None, standardize=True, log=False):
     #     if standardize:
@@ -59,7 +62,7 @@ class WebOmicsInference(object):
             data_arr = np.log(data_arr)
 
         # center data to have 0 mean and unit variance for heatmap and pca
-        scaled_data = preprocessing.scale(data_arr, axis)
+        scaled_data = preprocessing.scale(data_arr, axis=axis)
 
         # set the values back to the dataframe
         sample_names = data_df.columns
@@ -69,25 +72,24 @@ class WebOmicsInference(object):
     def run_deseq(self, keep_threshold, case, control):
         logger.info('DeSEQ2 case is %s, control is %s' % (case, control))
         try:
-
-            from rpy2.robjects.packages import importr
-            from rpy2 import robjects as ro
-            from rpy2.robjects import Formula
-            from rpy2.robjects import pandas2ri
-
-            pandas2ri.activate()
-            deseq = importr('DESeq2')
-            design = Formula("~ group")
+            # make sure columns in count_data is ordered the same way as the index of col_data
             col_data = self.design_df
             count_data = self.data_df.astype(int)
-            count_data = count_data[
-                col_data.index]  # make sure columns in count_data is ordered the same way as the index of col_data
-            dds = deseq.DESeqDataSetFromMatrix(countData=count_data, colData=col_data, design=design)
+            count_data = count_data[col_data.index]
+
+            # pass to DeSEQ2
+            col_data_r = self._to_r_df(col_data)
+            count_data_r = self._to_r_df(count_data)
+
+            # make sure columns in count_data is ordered the same way as the index of col_data
+            deseq = importr('DESeq2')
+            design = Formula("~ group")
+            dds = deseq.DESeqDataSetFromMatrix(countData=count_data_r, colData=col_data_r, design=design)
             sv = ro.StrVector(col_data[GROUP_COL].values)
             condition = ro.FactorVector(sv)
-            runs = col_data.index
+            runs = ro.r('rownames')(col_data_r)
             rstring = """
-                function(dds, condition, runs, keepThreshold, case, control) {
+                function(dds, condition, runs, keepThreshold, case, control, shrinkage) {
                     # collapse technical replicates
                     dds$condition <- condition
                     dds$condition <- relevel(dds$condition, ref=control) # set control    
@@ -99,15 +101,21 @@ class WebOmicsInference(object):
                     ddsColl <- ddsColl[keep,]
                     # run DESeq2 analysis
                     ddsAnalysis <- DESeq(dds)
-                    res <- results(ddsAnalysis, contrast=c("group", case, control))
-                    resOrdered <- res[order(res$padj),]  # sort by p-adjusted values
+                    # Shrinkage of effect size (LFC estimates)
+                    if (shrinkage) {
+                        res <- lfcShrink(ddsAnalysis, contrast=c("group", case, control), type="normal")                     
+                    } else {
+                        res <- results(ddsAnalysis, contrast=c("group", case, control))
+                    }
+                    resOrdered <- res[order(res$log2FoldChange),]  # sort by LFC
                     df = as.data.frame(resOrdered)
                     rld <- as.data.frame(assay(rlog(dds, blind=FALSE)))
                     list(df, rld, resOrdered)
                 }
             """
             rfunc = ro.r(rstring)
-            results = rfunc(dds, condition, runs, keep_threshold, case, control)
+            shrinkage = True
+            results = rfunc(dds, condition, runs, keep_threshold, case, control, shrinkage)
             pd_df = self._to_pd_df(results[0])
             rld_df = self._to_pd_df(results[1])
             res_ordered = results[2]
@@ -188,10 +196,11 @@ class WebOmicsInference(object):
         logger.debug(case_samples)
         logger.debug(control_samples)
         caseOrControl = case_samples | control_samples
-        #intensity_data_subset = log_data[caseOrControl.index[caseOrControl]]
+        # intensity_data_subset = log_data[caseOrControl.index[caseOrControl]]
         logger.debug(case_samples.index[case_samples].append(control_samples.index[control_samples]))
-        intensity_data_subset = log_data[case_samples.index[case_samples].append(control_samples.index[control_samples])]
-        #intensity_data = intensity_data  # make sure columns in count_data is ordered the same way as the index of col_data
+        intensity_data_subset = log_data[
+            case_samples.index[case_samples].append(control_samples.index[control_samples])]
+        # intensity_data = intensity_data  # make sure columns in count_data is ordered the same way as the index of col_data
         inputFactors = ro.StrVector(['Case'] * sum(case_samples) + ['Control'] * sum(control_samples))
 
         rstring = """
@@ -237,27 +246,30 @@ class WebOmicsInference(object):
         cumsum = np.cumsum(pca.explained_variance_ratio_)
         return X, cumsum
 
-    def _impute_data(self, min_value):
+    def _impute_data(self, min_value, replace_mean=True):
         if self.design_df is not None:
             grouping = self.design_df.groupby('group')
             for group, samples in grouping.groups.items():
+
                 # If all zero in group then replace with minimum
                 temp = self.data_df.loc[:, samples]
                 temp = (temp == 0).all(axis=1)
                 self.data_df.loc[temp, samples] = min_value
 
-                # Replace any other zeros with mean of group
-                subset_df = self.data_df.loc[:, samples]
-                self.data_df.loc[:, samples] = subset_df.mask(subset_df == 0, subset_df.mean(axis=1), axis=0)
+                if replace_mean:
+                    # replace any other zeros with mean of group
+                    subset_df = self.data_df.loc[:, samples]
+                    self.data_df.loc[:, samples] = subset_df.mask(subset_df == 0, subset_df.mean(axis=1), axis=0)
+                else:
+                    # replace all 0s with min_value
+                    self.data_df = self.data_df.replace(0, min_value)
 
     def _to_pd_df(self, r_df):
-        from rpy2.robjects import pandas2ri
-        try: # for rpy2 2.x
-            pd_df = pandas2ri.ri2py_dataframe(r_df)
-            pd_df.index = r_df.rownames
-        except: # for rpy2 3.x
-            from rpy2 import robjects as ro
-            from rpy2.robjects.conversion import localconverter
-            with localconverter(ro.default_converter + pandas2ri.converter):
-                pd_df = ro.conversion.rpy2py(r_df)
-        return pd_df
+        with localconverter(ro.default_converter + pandas2ri.converter):
+            pd_df = ro.conversion.rpy2py(r_df)
+            return pd_df
+
+    def _to_r_df(self, pd_df):
+        with localconverter(ro.default_converter + pandas2ri.converter):
+            r_df = ro.conversion.py2rpy(pd_df)
+            return r_df

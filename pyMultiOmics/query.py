@@ -136,7 +136,7 @@ class Connected(Query):
                     elif obs in possible_obs:  # everything else
                         data.append(row)
 
-        df = self._to_df(data)
+        df = self._to_df(data).drop_duplicates()
         self.result = df
 
     def _search_graph(self, mapping, node_id, dest_type):
@@ -186,7 +186,7 @@ class SignificantDE(Query):
         data_type = data_types[0]
 
         # get the DE result for the case vs control comparison
-        de_res = pipeline.de_results(data_type, self.case, self.control)
+        de_res = pipeline.get_de_results(data_type, self.case, self.control)
 
         # filter results
         pval_col = 'padj_%s_vs_%s' % (self.case, self.control)

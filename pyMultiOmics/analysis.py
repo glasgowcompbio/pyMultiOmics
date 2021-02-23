@@ -1,4 +1,3 @@
-import pandas as pd
 from loguru import logger
 
 from .constants import GENES, PROTEINS, COMPOUNDS, REACTIONS, PATHWAYS, SMALL, GENOMICS, INFERENCE_T_TEST, \
@@ -41,11 +40,11 @@ class AnalysisPipeline(object):
                 data_type, case, control
             ))
 
-    def de_results(self, data_type, case, control, method=None):
+    def get_de_analysis(self, data_type, case, control, method=None):
         if method is not None:
             assert method in [INFERENCE_T_TEST, INFERENCE_DESEQ, INFERENCE_LIMMA]
 
-        dfs = []
+        found = None
         for analysis in self.analyses[data_type]:
             # select only analysis for a particular case and control, if specified
             if analysis.case != case or analysis.control != control:
@@ -55,25 +54,25 @@ class AnalysisPipeline(object):
             if method is not None and analysis.get_analysis_type() != method:
                 continue
 
-            # get results dataframe for the DE analysis
-            res = analysis.get_results()
+            # return the first result we found
+            found = analysis
+        return found
 
-            # rename the column 'log2FoldChange' to 'FC'
-            res = res.rename(columns={
-                'log2FoldChange': 'FC'
-            })
+    def get_de_results(self, data_type, case, control, method=None):
+        # get results dataframe for the DE analysis
+        analysis = self.get_de_analysis(data_type, case, control, method=method)
+        res = analysis.get_results()
 
-            # add suffix to all columns: 'padj' and 'FC'
-            suffix = '_%s_vs_%s' % (analysis.case, analysis.control)
-            res = res.add_suffix(suffix)
-            dfs.append(res)
+        # rename the column 'log2FoldChange' to 'FC'
+        res = res.rename(columns={
+            'log2FoldChange': 'FC'
+        })
 
-        # combine all results
-        if len(dfs) > 0:
-            df = pd.concat(dfs, axis=1)
-            return df
-        else:
-            return pd.DataFrame()
+        # add suffix to 'padj' and 'FC' columns
+        suffix = '_%s_vs_%s' % (analysis.case, analysis.control)
+        res = res.add_suffix(suffix)
+        return res.sort_index()
+
 
 class CaseControlAnalysis():
     def __init__(self, data_df, design_df, data_type, case, control):
@@ -83,6 +82,7 @@ class CaseControlAnalysis():
         self.case = case
         self.control = control
         self.results = None
+        self.wi = None
 
     def __repr__(self):
         return 'CaseControlAnalysis %s: %s_vs_%s' % (self.data_type, self.case, self.control)
@@ -103,8 +103,8 @@ class TTestAnalysis(CaseControlAnalysis):
 
     def run(self):
         min_replace = SMALL
-        wi = WebOmicsInference(self.data_df, self.design_df, self.data_type, min_value=min_replace)
-        self.results = wi.run_ttest(self.case, self.control)
+        self.wi = WebOmicsInference(self.data_df, self.design_df, self.data_type, min_value=min_replace)
+        self.results = self.wi.run_ttest(self.case, self.control)
 
     def get_analysis_type(self):
         return INFERENCE_T_TEST
@@ -119,10 +119,13 @@ class DESeq2Analysis(CaseControlAnalysis):
 
     def run(self):
         assert self.data_type == GENOMICS
-        wi = WebOmicsInference(self.data_df, self.design_df, self.data_type)
-        min_replace = 10
+        MIN_VALUE = 1
+        KEEP_THRESHOLD = 10
+        REPLACE_MEAN = False
+        self.wi = WebOmicsInference(self.data_df, self.design_df, self.data_type, min_value=MIN_VALUE,
+                                    replace_mean=REPLACE_MEAN)
         try:
-            pd_df, rld_df, res_ordered = wi.run_deseq(min_replace, self.case, self.control)
+            pd_df, rld_df, res_ordered = self.wi.run_deseq(KEEP_THRESHOLD, self.case, self.control)
             self.results = pd_df[['padj', 'log2FoldChange']]
         except Exception as e:
             logger.warning('Failed to run DESeq2: %s' % str(e))
@@ -141,8 +144,8 @@ class LimmaAnalysis(CaseControlAnalysis):
     def run(self):
         min_replace = SMALL
         try:
-            wi = WebOmicsInference(self.data_df, self.design_df, self.data_type, min_value=min_replace)
-            self.results = wi.run_limma(self.case, self.control)
+            self.wi = WebOmicsInference(self.data_df, self.design_df, self.data_type, min_value=min_replace)
+            self.results = self.wi.run_limma(self.case, self.control)
         except Exception as e:
             logger.warning('Failed to run limma: %s' % str(e))
 
