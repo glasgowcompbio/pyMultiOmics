@@ -13,7 +13,7 @@ from pyMultiOmics.query import *
 from pyMultiOmics.pipelines import *
 
 
-DATA_FOLDER = os.path.abspath(os.path.join('test_data', 'zebrafish_data'))
+DATA_FOLDER = os.path.abspath(os.path.join('..', 'notebooks', 'test_data', 'zebrafish_data'))
 gene_data = pd.read_csv(os.path.join(DATA_FOLDER, 'gene_data_combined.csv'), index_col='Identifier')
 gene_design = pd.read_csv(os.path.join(DATA_FOLDER, 'gene_design.csv'), index_col='sample')
 protein_data = pd.read_csv(os.path.join(DATA_FOLDER, 'protein_data.csv'), index_col='Uniprot')
