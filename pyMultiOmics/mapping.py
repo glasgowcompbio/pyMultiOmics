@@ -14,6 +14,7 @@ from .query import QueryBuilder, Connected
 
 class Mapper():
     def __init__(self, species, metabolic_pathway_only=True, compound_database_str=COMPOUND_DATABASE_CHEBI):
+        print ('Push test, KMCL')
         self.species_list = [species]
         self.metabolic_pathway_only = metabolic_pathway_only
         self.compound_database_str = compound_database_str
