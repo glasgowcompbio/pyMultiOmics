@@ -40,7 +40,8 @@ def prepare_input(data_df):
 
 
 def reactome_mapping(observed_gene_df, observed_protein_df, observed_compound_df,
-                     compound_database_str, species_list, metabolic_pathway_only):
+                     compound_database_str, species_list, metabolic_pathway_only,
+                     include_related_chebi):
 
     observed_gene_df = prepare_input(observed_gene_df)
     observed_protein_df = prepare_input(observed_protein_df)
@@ -64,8 +65,14 @@ def reactome_mapping(observed_gene_df, observed_protein_df, observed_compound_df
 
     if observed_compound_df is not None:
         if compound_database_str == COMPOUND_DATABASE_CHEBI:
+            # if we have a df with KEGG ids, try to map this to chebi ids
             observed_compound_df.iloc[:, 0] = observed_compound_df.iloc[:, 0].map(
                 KEGG_2_CHEBI)  # assume 1st column is id
+
+            # get related chebi ids if necessary so we get more hits when mapping compounds
+            if include_related_chebi:
+                observed_compound_df = get_related_chebi(observed_compound_df)
+
         observed_compound_ids = get_ids_from_dataframe(observed_compound_df)
 
     ### map genes -> proteins ###
@@ -297,6 +304,10 @@ def get_ids_from_dataframe(df):
     else:
         return df.iloc[:, 0].values.tolist()  # id is always the first column
 
+
+def get_related_chebi(df):
+    # TODO: replace df with another where related chebi ids have been pulled
+    return df
 
 def merge_relation(r1, r2):
     unique_keys = list(set(r1.keys + r2.keys))

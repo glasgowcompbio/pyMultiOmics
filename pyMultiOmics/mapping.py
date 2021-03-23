@@ -13,11 +13,14 @@ from .query import QueryBuilder, Connected
 
 
 class Mapper():
-    def __init__(self, species, metabolic_pathway_only=True, compound_database_str=COMPOUND_DATABASE_CHEBI):
+    def __init__(self, species, metabolic_pathway_only=True,
+                 compound_database_str=COMPOUND_DATABASE_CHEBI,
+                 include_related_chebi=False):
         print ('Push test, KMCL')
         self.species_list = [species]
         self.metabolic_pathway_only = metabolic_pathway_only
         self.compound_database_str = compound_database_str
+        self.include_related_chebi = include_related_chebi
 
         self.G = None
 
@@ -63,7 +66,7 @@ class Mapper():
 
         # map different omics entities to reactome
         results = reactome_mapping(self.gene_df, self.protein_df, self.compound_df, self.compound_database_str,
-                                   self.species_list, self.metabolic_pathway_only)
+                                   self.species_list, self.metabolic_pathway_only, self.include_related_chebi)
         designs = {
             GENOMICS: self.gene_design,
             PROTEOMICS: self.protein_design,
