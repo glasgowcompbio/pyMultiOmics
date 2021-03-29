@@ -85,7 +85,6 @@ class Entity(Query):
                 node_data = self._get_node_data(mapping, node_id)
                 row = self._to_row(node_data)
                 data.append(row)
-                logger.info("Mapping was achieved for %s " % node_id)
             except KeyError:
                 logger.warning(" %s wasn't mapped, it may not be present in Reactome" % node_id)
         df = self._to_df(data)
