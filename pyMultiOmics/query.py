@@ -4,7 +4,7 @@ import pandas as pd
 from .common import as_list
 from .constants import REACTIONS, PATHWAYS, MAPPING, GENES, PROTEINS, COMPOUNDS, TRANSCRIPTS, QUERY_DISPLAY_NAME, \
     QUERY_NODE_ID, QUERY_DATA_TYPE, QUERY_OBSERVED, QUERY_ENTITY_ID
-
+from loguru import logger
 
 class QueryBuilder():
     def __init__(self, pipeline):
@@ -81,9 +81,12 @@ class Entity(Query):
         mapping = pipeline.mapping
         data = []
         for node_id in self.node_ids:
-            node_data = self._get_node_data(mapping, node_id)
-            row = self._to_row(node_data)
-            data.append(row)
+            try:
+                node_data = self._get_node_data(mapping, node_id)
+                row = self._to_row(node_data)
+                data.append(row)
+            except KeyError:
+                logger.warning(" %s wasn't mapped, it may not be present in Reactome" % node_id)
         df = self._to_df(data)
         self.result = df
 
