@@ -3,7 +3,7 @@ import pandas as pd
 
 from .common import as_list
 from .constants import REACTIONS, PATHWAYS, MAPPING, GENES, PROTEINS, COMPOUNDS, TRANSCRIPTS, QUERY_DISPLAY_NAME, \
-    QUERY_NODE_ID, QUERY_DATA_TYPE, QUERY_OBSERVED, QUERY_ENTITY_ID
+    QUERY_NODE_ID, QUERY_DATA_TYPE, QUERY_OBSERVED, QUERY_ENTITY_ID, QUERY_SOURCE_ID
 from loguru import logger
 
 class QueryBuilder():
@@ -131,7 +131,7 @@ class Connected(Query):
                         continue
 
                     node_data = self._get_node_data(mapping, connected_id)
-                    row = self._to_row(node_data)
+                    row = self._to_row(node_data) + [node_id]
 
                     obs = node_data['observed']
                     if obs is None:  # reactions, pathways don't have any observed value
@@ -141,6 +141,12 @@ class Connected(Query):
 
         df = self._to_df(data).drop_duplicates()
         self.result = df
+
+    def _to_df(self, data):
+        columns = [QUERY_ENTITY_ID, QUERY_DISPLAY_NAME, QUERY_DATA_TYPE, QUERY_OBSERVED, QUERY_SOURCE_ID]
+        df = pd.DataFrame(data, columns=columns)
+        df = df.set_index(QUERY_ENTITY_ID)
+        return df
 
     def _search_graph(self, mapping, node_id, dest_type):
         visited = []  # list of visited nodes
