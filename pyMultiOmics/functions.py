@@ -1,6 +1,8 @@
 import collections
 import json
 import re
+import traceback
+
 from collections import defaultdict
 from io import StringIO
 
@@ -8,20 +10,19 @@ import numpy as np
 import pandas as pd
 from loguru import logger
 
-from .common import load_obj
+from .common import load_obj, save_obj
 from .constants import COMPOUND_DATABASE_CHEBI, EXTERNAL_KEGG_TO_CHEBI, GENE_PK, PROTEIN_PK, REACTION_PK, \
     COMPOUND_PK, PATHWAY_PK, COMPOUND_DATABASE_KEGG, NA, EXTERNAL_GENE_NAMES, EXTERNAL_COMPOUND_NAMES, GENOMICS, \
     PROTEOMICS, METABOLOMICS, REACTIONS, PATHWAYS, GENES_TO_PROTEINS, PROTEINS_TO_REACTIONS, COMPOUNDS_TO_REACTIONS, \
-    REACTIONS_TO_PATHWAYS, IDENTIFIER_COL, PIMP_PEAK_ID_COL, GROUP_COL, DEFAULT_GROUP_NAME, PADJ_COL_PREFIX, \
-    FC_COL_PREFIX, SAMPLE_COL
+    REACTIONS_TO_PATHWAYS, IDENTIFIER_COL, PIMP_PEAK_ID_COL, GROUP_COL, DEFAULT_GROUP_NAME, PADJ_COL_PREFIX, CHEBI_BFS_RELATION_DICT, \
+    FC_COL_PREFIX, SAMPLE_COL, get_data_path, DATA_DIR
 from .metadata import get_gene_names, get_compound_metadata, clean_label
 from .reactome import ensembl_to_uniprot, uniprot_to_reaction, compound_to_reaction, \
     reaction_to_pathway, reaction_to_uniprot, reaction_to_compound, uniprot_to_ensembl
 
 Relation = collections.namedtuple('Relation', 'keys values mapping_list')
 
-from pyMultiOmics.constants import IDENTIFIER_COL
-
+# from pyMultiOmics.constants import IDENTIFIER_COL
 
 def prepare_input(data_df):
     if data_df is None:
@@ -62,18 +63,19 @@ def reactome_mapping(observed_gene_df, observed_protein_df, observed_compound_df
 
     if len(not_found) > 0:
         logger.debug('Not found: %d when converting kegg -> chebi ids' % len(not_found))
-
     if observed_compound_df is not None:
         if compound_database_str == COMPOUND_DATABASE_CHEBI:
             # if we have a df with KEGG ids, try to map this to chebi ids
             observed_compound_df.iloc[:, 0] = observed_compound_df.iloc[:, 0].map(
                 KEGG_2_CHEBI)  # assume 1st column is id
-
-            # get related chebi ids if necessary so we get more hits when mapping compounds
+          # get related chebi ids if necessary so we get more hits when mapping compounds
             if include_related_chebi:
+                logger.info('Including related chebi ids')
                 observed_compound_df = get_related_chebi(observed_compound_df)
-
+        observed_compound_df = remove_dupes(observed_compound_df)
         observed_compound_ids = get_ids_from_dataframe(observed_compound_df)
+
+        logger.info('There are %d observed compound ids' % len(observed_compound_ids))
 
     ### map genes -> proteins ###
     logger.info('Mapping genes -> proteins')
@@ -188,6 +190,7 @@ def reactome_mapping(observed_gene_df, observed_protein_df, observed_compound_df
         mapping = None
     except AttributeError:
         mapping = None
+
     compounds_json = pk_to_json('compound_pk', 'compound_id', all_compound_ids, metadata_map, observed_compound_df,
                                 observed_ids=observed_compound_ids, mapping=mapping)
     if mapping:
@@ -305,9 +308,164 @@ def get_ids_from_dataframe(df):
         return df.iloc[:, 0].values.tolist()  # id is always the first column
 
 
-def get_related_chebi(df):
-    # TODO: replace df with another where related chebi ids have been pulled
+def get_related_chebi(cmpd_df):
+    """
+    A method to add rows for related Chebi_ids given an Identifier that has related chebi_ids.
+    The rows Chebi_id: related_chebi_id are duplicated in terms of the intenisty data
+    :param cmpd_df: A DF with Chebi_ids as the Identifiers.
+    :return: cmpd_df including the rows of intensity data for the related chebis.
+    """
+    cmpd_df = cmpd_df.copy()
+
+    # ensure index type is set to string, since get_chebi_relation_dict also returns string as the keys
+    cmpd_df.index = cmpd_df.index.map(str)
+    # cmpd_df = cmpd_df.reset_index()
+    original_cmpds = set(cmpd_df[IDENTIFIER_COL])  # used for checking later
+
+    # construct the related chebi dict
+    chebi_rel_dict = get_chebi_relation_dict()
+
+    # loop through each row in cmpd_data
+    with_related_data = []
+    for ix, row in cmpd_df.iterrows():
+
+        # add the current row we're looping
+        current_identifier = row[IDENTIFIER_COL]
+        with_related_data.append(row)
+
+        # check if there are related compounds to add
+        if current_identifier in chebi_rel_dict:
+            # if yes, get the related compounds
+            chebi_list = chebi_rel_dict[current_identifier]
+            for c in chebi_list:
+                # add the related chebi, but only if it's not already present in the original compound
+                if c not in original_cmpds:
+                    current_row = row.copy()
+                    current_row[IDENTIFIER_COL] = c
+                    with_related_data.append(current_row)
+
+    # combine all the rows into a single dataframe
+    df = pd.concat(with_related_data, axis=1).T
+    # df = df.set_index(IDENTIFIER_COL)
+    logger.info('Inserted %d related compounds' % (len(df) - len(cmpd_df)))
+
+    #Remove any rows with duplicate Chebi_ids
+    # rm_dups_df = remove_dupes(df)
+
     return df
+
+
+def remove_dupes(df):
+    """
+    :param df: A dataframe with an Identifier column and intensity data.
+    :return: The same dataframe with one row per identifier - with the row chosen of max sum of intensities
+    across the row. Duplicate rows deleted.
+    """
+    # df = df.reset_index()
+
+    # group df by the 'Identifier' column
+    to_delete = []
+    grouped = df.groupby(df[IDENTIFIER_COL])
+    for identifier, group_df in grouped:
+
+        # if there are multiple rows sharing the same identifier
+        if len(group_df) > 1:
+            # remove 'Identifier' column from the grouped df since it can't be summed
+            group_df = group_df.drop(IDENTIFIER_COL, axis=1)
+
+            # find the row with the largest sum across the row in the group
+            idxmax = group_df.sum(axis=1).idxmax()
+
+            # mark all the rows in the group for deletion, except the one with the largest sum
+            temp = group_df.index.tolist()
+            temp.remove(idxmax)
+            to_delete.extend(temp)
+
+    # actually do the deletion here
+    logger.info('Removing %d rows with duplicate identifiers' % (len(to_delete)))
+    df = df.drop(to_delete)
+    # df = df.set_index(IDENTIFIER_COL)
+    return df
+
+def get_chebi_relation_dict():
+    """
+    A method to parse the chebi relation tsv and store the relationship we want in a dictionary
+    :return: Dict with structure Chebi_id: [related_chebi_ids]
+    """
+
+    logger.info("Getting %s " % CHEBI_BFS_RELATION_DICT)
+
+    chebi_bfs_relation_dict = load_obj(DATA_DIR + "/"+CHEBI_BFS_RELATION_DICT)
+
+    if chebi_bfs_relation_dict is None:
+        logger.info("Constructing %s " % CHEBI_BFS_RELATION_DICT)
+        try:
+            relation_dir = get_data_path(DATA_DIR, 'relation.tsv')
+            chebi_relation_df = pd.read_csv(relation_dir, delimiter="\t")
+
+        except FileNotFoundError as e:
+            logger.error("data/relation.tsv must be present")
+            raise e
+
+        # List of relationship we want in the dictionary
+        select_list = ["is_conjugate_base_of", "is_conjugate_acid_of", "is_tautomer_of"]
+        chebi_select_df = chebi_relation_df[chebi_relation_df.TYPE.isin(select_list)]
+
+        chebi_relation_dict = {}
+        # Gather all the INIT_IDs into a dictionary so that each INIT_ID is unique
+        for ix, row in chebi_select_df.iterrows():
+            init_id = str(row.INIT_ID)
+            final_id = str(row.FINAL_ID)
+            if init_id in chebi_relation_dict.keys():
+                # Append the final_id onto the existing values
+                id_1 = chebi_relation_dict[init_id]
+                joined_string = ", ".join([id_1, final_id])
+                chebi_relation_dict[init_id] = joined_string
+            else:  # make a new key entry for the dict
+                chebi_relation_dict[init_id] = final_id
+
+        # Change string values to a list.
+        graph = {k: v.replace(" ", "").split(",") for k, v in chebi_relation_dict.items()}
+
+        chebi_bfs_relation_dict = {}
+        for k, v in graph.items():
+            r_chebis = bfs_get_related(graph, k)
+            r_chebis.remove(k) #remove original key from list
+            chebi_bfs_relation_dict[k] = r_chebis
+        try:
+            logger.info("saving chebi_relation_dict")
+            save_obj(chebi_bfs_relation_dict, DATA_DIR + "/"+CHEBI_BFS_RELATION_DICT)
+
+        except Exception as e:
+            logger.error("Pickle didn't work because of %s " % e)
+            traceback.print_exc()
+            pass
+
+    return chebi_bfs_relation_dict
+
+def bfs_get_related(graph_dict, node):
+    """
+    :param graph: Dictionary of key: ['value'] pairs
+    :param node: the key for which all related values should be returned
+    :return: All related keys as a list
+    """
+    visited = [] # List to keep track of visited nodes.
+    queue = []     #Initialize a queue
+    related_keys = []
+
+    visited.append(node)
+    queue.append(node)
+
+    while queue:
+        k = queue.pop(0)
+        related_keys.append(k)
+
+        for neighbour in graph_dict[k]:
+          if neighbour not in visited:
+            visited.append(neighbour)
+            queue.append(neighbour)
+
+    return related_keys
 
 def merge_relation(r1, r2):
     unique_keys = list(set(r1.keys + r2.keys))
@@ -320,7 +478,6 @@ def merge_relation(r1, r2):
 
 def reverse_relation(rel):
     return Relation(keys=rel.values, values=rel.keys, mapping_list=rel.mapping_list)
-
 
 def expand_relation(rel, mapping, pk_col):
     expanded_keys = substitute(rel.keys, mapping)
@@ -370,6 +527,7 @@ def pk_to_json(pk_label, display_label, data, metadata_map, observed_df, has_spe
             observed_df[IDENTIFIER_COL] = observed_df[IDENTIFIER_COL] + '_' + observed_df[PIMP_PEAK_ID_COL].astype(str)
         if mapping is not None:
             data = expand_data(data, mapping)
+
         observed_df = observed_df.set_index(IDENTIFIER_COL)  # set identifier as index
         observed_df = observed_df[~observed_df.index.duplicated(keep='first')]  # remove row with duplicate indices
         observed_df = observed_df.fillna(value=0)  # replace all NaNs with 0s
