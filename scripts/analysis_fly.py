@@ -22,7 +22,7 @@ compound_design = pd.read_csv(os.path.join(DATA_FOLDER, 'fly_df_design.csv'), in
 
 set_log_level_info()
 
-m = Mapper(DANIO_RERIO, metabolic_pathway_only=True, include_related_chebi=True) \
+m = Mapper(DROSOPHILA_MELANOGASTER, metabolic_pathway_only=True, include_related_chebi=True) \
         .set_gene(gene_data, gene_design) \
         .set_compound(compound_data, compound_design) \
         .build()
