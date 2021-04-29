@@ -12,6 +12,8 @@ EXTERNAL_KEGG_TO_CHEBI = get_data_path(DATA_DIR, 'kegg_to_chebi.p')
 EXTERNAL_GENE_NAMES = get_data_path(DATA_DIR, 'gene_names.p')
 EXTERNAL_GO_DATA = get_data_path(DATA_DIR, 'go_data.p')
 
+CHEBI_BFS_RELATION_DICT = 'chebi_bfs_relation_dict.pkl'
+
 ARABIDOPSIS_THALIANA = 'Arabidopsis thaliana'
 BOS_TAURUS = 'Bos taurus'
 CAENORHABDITIS_ELEGANS = 'Caenorhabditis elegans'
@@ -101,7 +103,7 @@ IDS = {
 COMPOUND_DATABASE_KEGG = 'KEGG'
 COMPOUND_DATABASE_CHEBI = 'ChEBI'
 
-IDENTIFIER_COL = 'identifier'
+IDENTIFIER_COL = 'Identifier'
 PADJ_COL_PREFIX = 'padj_'
 FC_COL_PREFIX = 'FC_'
 SAMPLE_COL = 'sample'
