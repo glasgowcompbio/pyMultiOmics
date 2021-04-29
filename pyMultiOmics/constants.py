@@ -135,3 +135,5 @@ QUERY_DATA_TYPE = 'data_type'
 QUERY_NODE_ID = 'node_id'
 QUERY_DISPLAY_NAME = 'display_name'
 QUERY_SOURCE_ID = 'source_id'
+
+TRUNCATE_LIMIT = 10000
