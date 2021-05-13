@@ -11,6 +11,8 @@ from loguru import logger
 import requests
 from tqdm import tqdm
 
+from pyMultiOmics.constants import TRUNCATE_LIMIT
+
 
 def create_if_not_exist(out_dir):
     if not os.path.exists(out_dir) and len(out_dir) > 0:
@@ -117,3 +119,8 @@ def set_log_level_debug(remove_id=None):
 
 def add_log_file(log_path, level):
     logger.add(log_path, level=level)
+
+
+def truncate(my_str):
+    my_str = (my_str[:TRUNCATE_LIMIT] + '...') if len(my_str) > TRUNCATE_LIMIT else my_str
+    return my_str

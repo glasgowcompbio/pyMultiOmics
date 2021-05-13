@@ -1,10 +1,12 @@
 import numpy as np
 import pandas as pd
+from loguru import logger
 
 from .common import as_list
 from .constants import REACTIONS, PATHWAYS, MAPPING, GENES, PROTEINS, COMPOUNDS, TRANSCRIPTS, QUERY_DISPLAY_NAME, \
     QUERY_NODE_ID, QUERY_DATA_TYPE, QUERY_OBSERVED, QUERY_ENTITY_ID, QUERY_SOURCE_ID
-from loguru import logger
+from .info import get_info
+
 
 class QueryBuilder():
     def __init__(self, pipeline):
@@ -225,3 +227,23 @@ class SignificantDE(Query):
             # else take the top N result according to the sort order
             final_res = merged.sort_values(fc_col, ascending=self.ascending).head(self.N)
         self.result = final_res
+
+
+class Info(Query):
+    def run(self, pipeline, previous_query):
+        previous_res = previous_query.get_result()
+        copy_df = previous_res.copy()
+        node_info = []
+        node_images = []
+        node_links = []
+        for node_id, node_data in copy_df.iterrows():
+            data_type = node_data[QUERY_DATA_TYPE]
+            res = get_info(node_id, data_type)
+            node_info.append(res['infos'])
+            node_images.append(res['images'])
+            node_links.append(res['links'])
+
+        copy_df['infos'] = node_info
+        copy_df['images'] = node_images
+        copy_df['links'] = node_links
+        self.result = copy_df
