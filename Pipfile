@@ -6,7 +6,7 @@ name = "pypi"
 [packages]
 numpy = "*"
 scipy = "*"
-pandas = "==1.1.4"
+pandas = "*"
 seaborn = "*"
 scikit-learn = "*"
 matplotlib = "*"
@@ -20,7 +20,8 @@ pillow = "*"
 jupyterlab = "==2.2"
 bioservices = "*"
 networkx = "*"
-rpy2 = "==3.3.6"
+rpy2 = {version = "==3.3.6", sys_platform = "!= 'win32'"}
+tzlocal = "*"
 pals-pathway = "*"
 
 [dev-packages]
