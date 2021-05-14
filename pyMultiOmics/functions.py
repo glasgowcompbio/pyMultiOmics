@@ -2,7 +2,6 @@ import collections
 import json
 import re
 import traceback
-
 from collections import defaultdict
 from io import StringIO
 
@@ -14,13 +13,15 @@ from .common import load_obj, save_obj
 from .constants import COMPOUND_DATABASE_CHEBI, EXTERNAL_KEGG_TO_CHEBI, GENE_PK, PROTEIN_PK, REACTION_PK, \
     COMPOUND_PK, PATHWAY_PK, COMPOUND_DATABASE_KEGG, NA, EXTERNAL_GENE_NAMES, EXTERNAL_COMPOUND_NAMES, GENOMICS, \
     PROTEOMICS, METABOLOMICS, REACTIONS, PATHWAYS, GENES_TO_PROTEINS, PROTEINS_TO_REACTIONS, COMPOUNDS_TO_REACTIONS, \
-    REACTIONS_TO_PATHWAYS, IDENTIFIER_COL, PIMP_PEAK_ID_COL, GROUP_COL, DEFAULT_GROUP_NAME, PADJ_COL_PREFIX, CHEBI_BFS_RELATION_DICT, \
-    FC_COL_PREFIX, SAMPLE_COL, get_data_path, DATA_DIR
+    REACTIONS_TO_PATHWAYS, IDENTIFIER_COL, PIMP_PEAK_ID_COL, GROUP_COL, DEFAULT_GROUP_NAME, PADJ_COL_PREFIX, \
+    CHEBI_BFS_RELATION_DICT, \
+    FC_COL_PREFIX, SAMPLE_COL, DATA_DIR, CHEBI_RELATION_TSV
 from .metadata import get_gene_names, get_compound_metadata, clean_label
 from .reactome import ensembl_to_uniprot, uniprot_to_reaction, compound_to_reaction, \
     reaction_to_pathway, reaction_to_uniprot, reaction_to_compound, uniprot_to_ensembl
 
 Relation = collections.namedtuple('Relation', 'keys values mapping_list')
+
 
 # from pyMultiOmics.constants import IDENTIFIER_COL
 
@@ -43,7 +44,6 @@ def prepare_input(data_df):
 def reactome_mapping(observed_gene_df, observed_protein_df, observed_compound_df,
                      compound_database_str, species_list, metabolic_pathway_only,
                      include_related_chebi):
-
     observed_gene_df = prepare_input(observed_gene_df)
     observed_protein_df = prepare_input(observed_protein_df)
     observed_compound_df = prepare_input(observed_compound_df)
@@ -68,7 +68,7 @@ def reactome_mapping(observed_gene_df, observed_protein_df, observed_compound_df
             # if we have a df with KEGG ids, try to map this to chebi ids
             observed_compound_df.iloc[:, 0] = observed_compound_df.iloc[:, 0].map(
                 KEGG_2_CHEBI)  # assume 1st column is id
-          # get related chebi ids if necessary so we get more hits when mapping compounds
+            # get related chebi ids if necessary so we get more hits when mapping compounds
             if include_related_chebi:
                 logger.info('Including related chebi ids')
                 observed_compound_df = get_related_chebi(observed_compound_df)
@@ -349,7 +349,7 @@ def get_related_chebi(cmpd_df):
     # df = df.set_index(IDENTIFIER_COL)
     logger.info('Inserted %d related compounds' % (len(df) - len(cmpd_df)))
 
-    #Remove any rows with duplicate Chebi_ids
+    # Remove any rows with duplicate Chebi_ids
     # rm_dups_df = remove_dupes(df)
 
     return df
@@ -387,6 +387,7 @@ def remove_dupes(df):
     # df = df.set_index(IDENTIFIER_COL)
     return df
 
+
 def get_chebi_relation_dict():
     """
     A method to parse the chebi relation tsv and store the relationship we want in a dictionary
@@ -395,14 +396,12 @@ def get_chebi_relation_dict():
 
     logger.info("Getting %s " % CHEBI_BFS_RELATION_DICT)
 
-    chebi_bfs_relation_dict = load_obj(DATA_DIR + "/"+CHEBI_BFS_RELATION_DICT)
+    chebi_bfs_relation_dict = load_obj(CHEBI_BFS_RELATION_DICT)
 
     if chebi_bfs_relation_dict is None:
         logger.info("Constructing %s " % CHEBI_BFS_RELATION_DICT)
         try:
-            relation_dir = get_data_path(DATA_DIR, 'relation.tsv')
-            chebi_relation_df = pd.read_csv(relation_dir, delimiter="\t")
-
+            chebi_relation_df = pd.read_csv(CHEBI_RELATION_TSV, delimiter="\t")
         except FileNotFoundError as e:
             logger.error("data/relation.tsv must be present")
             raise e
@@ -430,11 +429,11 @@ def get_chebi_relation_dict():
         chebi_bfs_relation_dict = {}
         for k, v in graph.items():
             r_chebis = bfs_get_related(graph, k)
-            r_chebis.remove(k) #remove original key from list
+            r_chebis.remove(k)  # remove original key from list
             chebi_bfs_relation_dict[k] = r_chebis
         try:
             logger.info("saving chebi_relation_dict")
-            save_obj(chebi_bfs_relation_dict, DATA_DIR + "/"+CHEBI_BFS_RELATION_DICT)
+            save_obj(chebi_bfs_relation_dict, CHEBI_BFS_RELATION_DICT)
 
         except Exception as e:
             logger.error("Pickle didn't work because of %s " % e)
@@ -443,14 +442,15 @@ def get_chebi_relation_dict():
 
     return chebi_bfs_relation_dict
 
+
 def bfs_get_related(graph_dict, node):
     """
     :param graph: Dictionary of key: ['value'] pairs
     :param node: the key for which all related values should be returned
     :return: All related keys as a list
     """
-    visited = [] # List to keep track of visited nodes.
-    queue = []     #Initialize a queue
+    visited = []  # List to keep track of visited nodes.
+    queue = []  # Initialize a queue
     related_keys = []
 
     visited.append(node)
@@ -461,11 +461,12 @@ def bfs_get_related(graph_dict, node):
         related_keys.append(k)
 
         for neighbour in graph_dict[k]:
-          if neighbour not in visited:
-            visited.append(neighbour)
-            queue.append(neighbour)
+            if neighbour not in visited:
+                visited.append(neighbour)
+                queue.append(neighbour)
 
     return related_keys
+
 
 def merge_relation(r1, r2):
     unique_keys = list(set(r1.keys + r2.keys))
@@ -478,6 +479,7 @@ def merge_relation(r1, r2):
 
 def reverse_relation(rel):
     return Relation(keys=rel.values, values=rel.keys, mapping_list=rel.mapping_list)
+
 
 def expand_relation(rel, mapping, pk_col):
     expanded_keys = substitute(rel.keys, mapping)

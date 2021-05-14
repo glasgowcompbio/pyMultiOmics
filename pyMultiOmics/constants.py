@@ -12,7 +12,8 @@ EXTERNAL_KEGG_TO_CHEBI = get_data_path(DATA_DIR, 'kegg_to_chebi.p')
 EXTERNAL_GENE_NAMES = get_data_path(DATA_DIR, 'gene_names.p')
 EXTERNAL_GO_DATA = get_data_path(DATA_DIR, 'go_data.p')
 
-CHEBI_BFS_RELATION_DICT = 'chebi_bfs_relation_dict.pkl'
+CHEBI_BFS_RELATION_DICT = get_data_path(DATA_DIR, 'chebi_bfs_relation_dict.pkl')
+CHEBI_RELATION_TSV = get_data_path(DATA_DIR, 'relation.tsv')
 
 ARABIDOPSIS_THALIANA = 'Arabidopsis thaliana'
 BOS_TAURUS = 'Bos taurus'
