@@ -20,7 +20,6 @@ pillow = "*"
 jupyterlab = "==2.2"
 bioservices = "*"
 networkx = "*"
-rpy2 = {version = "==3.3.6", sys_platform = "!= 'win32'"}
 tzlocal = "*"
 pals-pathway = "*"
 

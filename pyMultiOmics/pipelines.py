@@ -1,5 +1,3 @@
-import sys
-
 import numpy as np
 import pandas as pd
 from loguru import logger
@@ -7,15 +5,6 @@ from scipy import stats
 from sklearn import preprocessing
 from sklearn.decomposition import PCA
 from statsmodels.sandbox.stats.multicomp import multipletests
-
-try:
-    from rpy2 import robjects as ro
-    from rpy2.robjects import Formula
-    from rpy2.robjects import pandas2ri
-    from rpy2.robjects.conversion import localconverter
-    from rpy2.robjects.packages import importr
-except OSError:
-    logger.warning('Error loading rpy2 on %s, R function calls will be made online' % sys.platform)
 
 from .constants import GROUP_COL, IDS, PKS
 
@@ -76,59 +65,7 @@ class WebOmicsInference(object):
         return data_df
 
     def run_deseq(self, keep_threshold, case, control):
-        logger.info('DeSEQ2 case is %s, control is %s' % (case, control))
-        try:
-            # make sure columns in count_data is ordered the same way as the index of col_data
-            col_data = self.design_df
-            count_data = self.data_df.astype(int)
-            count_data = count_data[col_data.index]
-
-            # pass to DeSEQ2
-            col_data_r = self._to_r_df(col_data)
-            count_data_r = self._to_r_df(count_data)
-
-            # make sure columns in count_data is ordered the same way as the index of col_data
-            deseq = importr('DESeq2')
-            design = Formula("~ group")
-            dds = deseq.DESeqDataSetFromMatrix(countData=count_data_r, colData=col_data_r, design=design)
-            sv = ro.StrVector(col_data[GROUP_COL].values)
-            condition = ro.FactorVector(sv)
-            runs = ro.r('rownames')(col_data_r)
-            rstring = """
-                function(dds, condition, runs, keepThreshold, case, control, shrinkage) {
-                    # collapse technical replicates
-                    dds$condition <- condition
-                    dds$condition <- relevel(dds$condition, ref=control) # set control    
-                    dds$sample <- runs 
-                    dds$run <- runs        
-                    ddsColl <- collapseReplicates(dds, dds$sample, dds$run) 
-                    # count filter
-                    keep <- rowSums(counts(ddsColl)) >= keepThreshold
-                    ddsColl <- ddsColl[keep,]
-                    # run DESeq2 analysis
-                    ddsAnalysis <- DESeq(dds)
-                    # Shrinkage of effect size (LFC estimates)
-                    if (shrinkage) {
-                        res <- lfcShrink(ddsAnalysis, contrast=c("group", case, control), type="normal")                     
-                    } else {
-                        res <- results(ddsAnalysis, contrast=c("group", case, control))
-                    }
-                    resOrdered <- res[order(res$log2FoldChange),]  # sort by LFC
-                    df = as.data.frame(resOrdered)
-                    rld <- as.data.frame(assay(rlog(dds, blind=FALSE)))
-                    list(df, rld, resOrdered)
-                }
-            """
-            rfunc = ro.r(rstring)
-            shrinkage = True
-            results = rfunc(dds, condition, runs, keep_threshold, case, control, shrinkage)
-            pd_df = self._to_pd_df(results[0])
-            rld_df = self._to_pd_df(results[1])
-            res_ordered = results[2]
-            return pd_df, rld_df, res_ordered
-
-        except ImportError as e:
-            logger.warning('Failed to load rpy2: %s' % str(e))
+        logger.info('DeSEQ2 support is not available, please install rpy2 extra package')
 
     def run_ttest(self, case, control):
         logger.info('t-test case is %s, control is %s' % (case, control))
@@ -182,58 +119,7 @@ class WebOmicsInference(object):
         return result_df
 
     def run_limma(self, case, control):
-        logger.info('limma case is %s, control is %s' % (case, control))
-        count_data = self.data_df
-
-        # if there's a negative number, assume the data has been logged, so don't do it again
-        log = np.all(count_data.values >= 0)
-
-        from rpy2 import robjects as ro
-        from rpy2.robjects import pandas2ri
-
-        pandas2ri.activate()
-
-        intensity_data = self.data_df
-        intensity_data[intensity_data == 0.0] = np.nan
-        log_data = np.log2(self.data_df) if log else self.data_df
-        col_data = self.design_df
-        case_samples = col_data.group == case
-        control_samples = col_data.group == control
-        logger.debug(case_samples)
-        logger.debug(control_samples)
-        caseOrControl = case_samples | control_samples
-        # intensity_data_subset = log_data[caseOrControl.index[caseOrControl]]
-        logger.debug(case_samples.index[case_samples].append(control_samples.index[control_samples]))
-        intensity_data_subset = log_data[
-            case_samples.index[case_samples].append(control_samples.index[control_samples])]
-        # intensity_data = intensity_data  # make sure columns in count_data is ordered the same way as the index of col_data
-        inputFactors = ro.StrVector(['Case'] * sum(case_samples) + ['Control'] * sum(control_samples))
-
-        rstring = """
-           function(data, inputFactors) {
-                library(limma)
-                design = model.matrix(~0+factor(inputFactors))
-                colnames(design) = c('Case', 'Control')
-                fit = lmFit(data, design, method='ls')
-                contrast.matrix <- makeContrasts(Case-Control, levels=design)
-                fit2 <- contrasts.fit(fit, contrast.matrix)
-                fit2 <- eBayes(fit2)
-                list(fit2$coefficients[,1], fit2$p.value[,1]) 
-            }
-        """
-        rfunc = ro.r(rstring)
-        results = rfunc(intensity_data_subset, inputFactors)
-        lfc = results[0]
-        pvalues = results[1]
-        indices = self.data_df.index
-
-        # correct p-values
-        reject, pvals_corrected, _, _ = multipletests(pvalues, method='fdr_bh')
-        result_df = pd.DataFrame({
-            'padj': pvals_corrected,
-            'log2FoldChange': lfc
-        }, index=indices)
-        return result_df
+        logger.info('limma support is not available, please install rpy2 extra package')
 
     def get_pca(self, rld_df, n_components, plot=False):
         df = rld_df.transpose()
@@ -269,13 +155,3 @@ class WebOmicsInference(object):
                 else:
                     # replace all 0s with min_value
                     self.data_df = self.data_df.replace(0, min_value)
-
-    def _to_pd_df(self, r_df):
-        with localconverter(ro.default_converter + pandas2ri.converter):
-            pd_df = ro.conversion.rpy2py(r_df)
-            return pd_df
-
-    def _to_r_df(self, pd_df):
-        with localconverter(ro.default_converter + pandas2ri.converter):
-            r_df = ro.conversion.py2rpy(pd_df)
-            return r_df
