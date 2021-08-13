@@ -138,3 +138,6 @@ QUERY_DISPLAY_NAME = 'display_name'
 QUERY_SOURCE_ID = 'source_id'
 
 TRUNCATE_LIMIT = 10000
+
+MEASUREMENT_DF_LABEL = 'measurement dataframe'
+DESIGN_DF_LABEL = 'sample metadata dataframe'
