@@ -11,8 +11,8 @@ from loguru import logger
 
 from .common import load_obj, save_obj
 from .constants import COMPOUND_DATABASE_CHEBI, EXTERNAL_KEGG_TO_CHEBI, GENE_PK, PROTEIN_PK, REACTION_PK, \
-    COMPOUND_PK, PATHWAY_PK, COMPOUND_DATABASE_KEGG, NA, EXTERNAL_GENE_NAMES, EXTERNAL_COMPOUND_NAMES, GENOMICS, \
-    PROTEOMICS, METABOLOMICS, REACTIONS, PATHWAYS, GENES_TO_PROTEINS, PROTEINS_TO_REACTIONS, COMPOUNDS_TO_REACTIONS, \
+    COMPOUND_PK, PATHWAY_PK, COMPOUND_DATABASE_KEGG, NA, EXTERNAL_GENE_NAMES, EXTERNAL_COMPOUND_NAMES, GENES, \
+    PROTEINS, COMPOUNDS, REACTIONS, PATHWAYS, GENES_TO_PROTEINS, PROTEINS_TO_REACTIONS, COMPOUNDS_TO_REACTIONS, \
     REACTIONS_TO_PATHWAYS, IDENTIFIER_COL, PIMP_PEAK_ID_COL, GROUP_COL, DEFAULT_GROUP_NAME, PADJ_COL_PREFIX, \
     CHEBI_BFS_RELATION_DICT, \
     FC_COL_PREFIX, SAMPLE_COL, DATA_DIR, CHEBI_RELATION_TSV
@@ -215,9 +215,9 @@ def reactome_mapping(observed_gene_df, observed_protein_df, observed_compound_df
     reaction_2_pathways_json = json.dumps(reaction_2_pathways.mapping_list)
 
     results = {
-        GENOMICS: genes_json,
-        PROTEOMICS: proteins_json,
-        METABOLOMICS: compounds_json,
+        GENES: genes_json,
+        PROTEINS: proteins_json,
+        COMPOUNDS: compounds_json,
         REACTIONS: reactions_json,
         PATHWAYS: pathways_json,
         GENES_TO_PROTEINS: gene_2_proteins_json,

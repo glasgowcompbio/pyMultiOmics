@@ -3,7 +3,7 @@ from collections import OrderedDict
 import pandas as pd
 from loguru import logger
 
-from .constants import DataTypeDict, MEASUREMENT_DF_LABEL, DESIGN_DF_LABEL
+from .constants import MEASUREMENT_DF_LABEL, DESIGN_DF_LABEL
 
 
 class SingleOmicsData():
@@ -28,14 +28,6 @@ class SingleOmicsData():
             return od[next(reversed(od))]
         else:
             return self.initial_measurement_df
-
-    @property
-    def data_label(self):
-        try:
-            dtype_str = DataTypeDict[self.data_type]
-        except KeyError:
-            dtype_str = self.data_type
-        return dtype_str
 
     def get_initial_measurement_df(self):
         return self.initial_measurement_df.copy()
@@ -100,7 +92,7 @@ class SingleOmicsData():
         return cleaned_measurement_df, cleaned_design_df
 
     def __repr__(self):
-        dtype_str = self.data_label
+        dtype_str = self.data_type
         shape = self.data_df.shape
         return '%s data with (%d, %d) measurements' % (dtype_str, shape[0], shape[1])
 
@@ -127,7 +119,7 @@ class MultiOmicsData():
             data = self.views[v]
             df = data.data_df
             df = df.melt(var_name='feature')
-            df['view'] = data.data_label
+            df['view'] = data.data_type
             res = res.append(df)
         return res
 

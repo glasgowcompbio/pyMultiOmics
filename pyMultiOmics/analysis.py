@@ -1,6 +1,6 @@
 from loguru import logger
 
-from .constants import GENES, PROTEINS, COMPOUNDS, REACTIONS, PATHWAYS, SMALL, GENOMICS, INFERENCE_T_TEST, \
+from .constants import GENES, PROTEINS, COMPOUNDS, REACTIONS, PATHWAYS, SMALL, GENES, INFERENCE_T_TEST, \
     INFERENCE_DESEQ, INFERENCE_LIMMA
 from .pipelines import WebOmicsInference
 
@@ -118,7 +118,7 @@ class DESeq2Analysis(CaseControlAnalysis):
         super().__init__(data_df, design_df, data_type, case, control)
 
     def run(self):
-        assert self.data_type == GENOMICS
+        assert self.data_type == GENES
         MIN_VALUE = 1
         KEEP_THRESHOLD = 10
         REPLACE_MEAN = False
