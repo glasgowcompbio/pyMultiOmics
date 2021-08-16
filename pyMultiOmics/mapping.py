@@ -8,7 +8,7 @@ from .common import as_list
 from .constants import REACTIONS, PROTEINS, COMPOUNDS, GENES, PATHWAYS, COMPOUND_DATABASE_CHEBI, PKS, IDS, NA, \
     GENES_TO_PROTEINS, PROTEINS_TO_REACTIONS, COMPOUNDS_TO_REACTIONS, REACTIONS_TO_PATHWAYS
 from .functions import reactome_mapping
-from .query import QueryBuilder, Connected
+from .query import QueryBuilder, Connected, Entity
 
 
 class Mapper():
@@ -145,7 +145,7 @@ class Mapper():
         :return: a dataframe of connected entities
         """
         res = QueryBuilder(self) \
-            .add(SingleEntity(query_id)) \
+            .add(Entity(query_id)) \
             .add(Connected(data_type=dest_type, observed=observed)) \
             .run()
         return res
