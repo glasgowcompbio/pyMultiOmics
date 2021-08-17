@@ -76,7 +76,8 @@ COMPOUND_DATABASE_KEGG = 'KEGG'
 COMPOUND_DATABASE_CHEBI = 'ChEBI'
 
 IDENTIFIER_COL = 'Identifier'
-PADJ_COL_PREFIX = 'padj_'
+PVALUE_COL_PREFIX = 'pvalue_'
+PADJ_COL_PREFIX = 'padj_' # adjusted pvalue column, unused?
 FC_COL_PREFIX = 'FC_'
 SAMPLE_COL = 'sample'
 GROUP_COL = 'group'

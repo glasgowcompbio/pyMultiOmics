@@ -1,3 +1,9 @@
+# Plotly
+
+To make plotly plot shows up in jupyterlab:
+
+$ jupyter labextension install jupyterlab-plotly
+
 # Reactome Setup Guide
 
 The following are the instructions to get Reactome running on Ubuntu 18.04. For other OS, please refer to the official Neo4j documentation.

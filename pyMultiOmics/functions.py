@@ -13,7 +13,7 @@ from .common import load_obj, save_obj
 from .constants import COMPOUND_DATABASE_CHEBI, EXTERNAL_KEGG_TO_CHEBI, GENE_PK, PROTEIN_PK, REACTION_PK, \
     COMPOUND_PK, PATHWAY_PK, COMPOUND_DATABASE_KEGG, NA, EXTERNAL_GENE_NAMES, EXTERNAL_COMPOUND_NAMES, GENES, \
     PROTEINS, COMPOUNDS, REACTIONS, PATHWAYS, GENES_TO_PROTEINS, PROTEINS_TO_REACTIONS, COMPOUNDS_TO_REACTIONS, \
-    REACTIONS_TO_PATHWAYS, IDENTIFIER_COL, PIMP_PEAK_ID_COL, GROUP_COL, DEFAULT_GROUP_NAME, PADJ_COL_PREFIX, \
+    REACTIONS_TO_PATHWAYS, IDENTIFIER_COL, PIMP_PEAK_ID_COL, GROUP_COL, DEFAULT_GROUP_NAME, PVALUE_COL_PREFIX, \
     CHEBI_BFS_RELATION_DICT, \
     FC_COL_PREFIX, SAMPLE_COL, DATA_DIR, CHEBI_RELATION_TSV
 from .metadata import get_gene_names, get_compound_metadata, clean_label
@@ -287,7 +287,7 @@ def csv_to_dataframe(csv_str):
             sample_name = sample_data[i]
             if sample_name == IDENTIFIER_COL or \
                     sample_name == PIMP_PEAK_ID_COL or \
-                    sample_name.startswith(PADJ_COL_PREFIX) or \
+                    sample_name.startswith(PVALUE_COL_PREFIX) or \
                     sample_name.startswith(FC_COL_PREFIX):
                 continue
             filtered_sample_data.append(sample_data[i])

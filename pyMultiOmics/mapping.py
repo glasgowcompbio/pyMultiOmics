@@ -12,53 +12,21 @@ from .query import QueryBuilder, Connected, Entity
 
 
 class Mapper():
-    def __init__(self, species, metabolic_pathway_only=True,
+    def __init__(self, multi_omics_data, species,
+                 metabolic_pathway_only=True,
                  compound_database_str=COMPOUND_DATABASE_CHEBI,
                  include_related_chebi=False):
+        self.multi_omics_data = multi_omics_data
+        self.gene_df, self.gene_design = self.multi_omics_data.get_dfs(GENES)
+        self.protein_df, self.protein_design = self.multi_omics_data.get_dfs(PROTEINS)
+        self.compound_df, self.compound_design = self.multi_omics_data.get_dfs(COMPOUNDS)
+
         self.species_list = [species]
         self.metabolic_pathway_only = metabolic_pathway_only
         self.compound_database_str = compound_database_str
         self.include_related_chebi = include_related_chebi
 
         self.G = None
-
-        self.gene_df = None
-        self.gene_design = None
-
-        self.protein_df = None
-        self.protein_design = None
-
-        self.compound_df = None
-        self.compound_design = None
-
-    def set_gene(self, gene_df, gene_design):
-        self.gene_df = gene_df
-        self.gene_design = gene_design
-        return self
-
-    def set_protein(self, protein_df, protein_design):
-        self.protein_df = protein_df
-        self.protein_design = protein_design
-        return self
-
-    def set_compound(self, compound_df, compound_design):
-        self.compound_df = compound_df
-        self.compound_design = compound_design
-        return self
-
-    def get_dfs(self, data_type):
-        data_df = None
-        design_df = None
-        if data_type == GENES:
-            data_df = self.gene_df
-            design_df = self.gene_design
-        elif data_type == PROTEINS:
-            data_df = self.protein_df
-            design_df = self.protein_design
-        elif data_type == COMPOUNDS:
-            data_df = self.compound_df
-            design_df = self.compound_design
-        return data_df, design_df
 
     def build(self):
 
