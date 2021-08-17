@@ -3,8 +3,8 @@ import pandas as pd
 from loguru import logger
 
 from .common import as_list
-from .constants import REACTIONS, PATHWAYS, MAPPING, GENES, PROTEINS, COMPOUNDS, TRANSCRIPTS, QUERY_DISPLAY_NAME, \
-    QUERY_NODE_ID, QUERY_DATA_TYPE, QUERY_OBSERVED, QUERY_ENTITY_ID, QUERY_SOURCE_ID
+from .constants import REACTIONS, PATHWAYS, GENES, PROTEINS, COMPOUNDS, QUERY_DISPLAY_NAME, QUERY_NODE_ID, \
+    QUERY_DATA_TYPE, QUERY_OBSERVED, QUERY_ENTITY_ID, QUERY_SOURCE_ID
 from .info import get_info
 
 
@@ -64,7 +64,7 @@ class Query():
         display_name = node_data[QUERY_DISPLAY_NAME]
         data_type = node_data[QUERY_DATA_TYPE]
         obs = node_data[QUERY_OBSERVED]
-        row = [node_id, display_name, MAPPING[data_type], obs]
+        row = [node_id, display_name, data_type, obs]
         return row
 
     def _to_df(self, data):
@@ -113,8 +113,7 @@ class Select(Query):
 class Connected(Query):
     def __init__(self, data_type=None, observed=None):
         super().__init__()
-        self.data_types = as_list(data_type) if data_type is not None else [GENES, TRANSCRIPTS,
-                                                                            PROTEINS, COMPOUNDS,
+        self.data_types = as_list(data_type) if data_type is not None else [GENES, PROTEINS, COMPOUNDS,
                                                                             REACTIONS, PATHWAYS]
         self.observed = observed
 

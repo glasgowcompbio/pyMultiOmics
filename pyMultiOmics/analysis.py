@@ -1,13 +1,16 @@
 from loguru import logger
 
-from .constants import GENES, PROTEINS, COMPOUNDS, REACTIONS, PATHWAYS, SMALL, GENOMICS, INFERENCE_T_TEST, \
+from .constants import GENES, PROTEINS, COMPOUNDS, REACTIONS, PATHWAYS, SMALL, GENES, INFERENCE_T_TEST, \
     INFERENCE_DESEQ, INFERENCE_LIMMA
 from .pipelines import WebOmicsInference
 
 
 class AnalysisPipeline(object):
-    def __init__(self, mapping):
+    def __init__(self, multi_omics_data, mapping):
+        self.multi_omics_data = multi_omics_data
         self.mapping = mapping
+
+        # stores analyses and their results
         self.analyses = {
             GENES: [],
             PROTEINS: [],
@@ -31,10 +34,11 @@ class AnalysisPipeline(object):
                 found = True
 
         if not found:
-            data_df, design_df = self.mapping.get_dfs(data_type)
-            analysis = M(data_df, design_df, data_type, case, control)
-            analysis.run()
-            self.analyses[data_type].append(analysis)
+            data_df, design_df = self.multi_omics_data.get_dfs(data_type)
+            if data_df is not None and design_df is not None:
+                analysis = M(data_df, design_df, data_type, case, control)
+                analysis.run()
+                self.analyses[data_type].append(analysis)
         else:
             logger.warning('DE analysis for data_type=%s case=%s control=%s already exists' % (
                 data_type, case, control
@@ -118,7 +122,7 @@ class DESeq2Analysis(CaseControlAnalysis):
         super().__init__(data_df, design_df, data_type, case, control)
 
     def run(self):
-        assert self.data_type == GENOMICS
+        assert self.data_type == GENES
         MIN_VALUE = 1
         KEEP_THRESHOLD = 10
         REPLACE_MEAN = False

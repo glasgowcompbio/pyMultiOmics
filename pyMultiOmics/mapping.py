@@ -5,17 +5,22 @@ import pandas as pd
 from loguru import logger
 
 from .common import as_list
-from .constants import REACTIONS, PROTEOMICS, METABOLOMICS, GENOMICS, TRANSCRIPTOMICS, PATHWAYS, DataTypeDict, \
-    COMPOUND_DATABASE_CHEBI, MAPPING, PKS, IDS, NA, GENES_TO_PROTEINS, PROTEINS_TO_REACTIONS, COMPOUNDS_TO_REACTIONS, \
-    REACTIONS_TO_PATHWAYS
+from .constants import REACTIONS, PROTEINS, COMPOUNDS, GENES, PATHWAYS, COMPOUND_DATABASE_CHEBI, PKS, IDS, NA, \
+    GENES_TO_PROTEINS, PROTEINS_TO_REACTIONS, COMPOUNDS_TO_REACTIONS, REACTIONS_TO_PATHWAYS
 from .functions import reactome_mapping
-from .query import QueryBuilder, Connected
+from .query import QueryBuilder, Connected, Entity
 
 
 class Mapper():
-    def __init__(self, species, metabolic_pathway_only=True,
+    def __init__(self, multi_omics_data, species,
+                 metabolic_pathway_only=True,
                  compound_database_str=COMPOUND_DATABASE_CHEBI,
                  include_related_chebi=False):
+        self.multi_omics_data = multi_omics_data
+        self.gene_df, self.gene_design = self.multi_omics_data.get_dfs(GENES)
+        self.protein_df, self.protein_design = self.multi_omics_data.get_dfs(PROTEINS)
+        self.compound_df, self.compound_design = self.multi_omics_data.get_dfs(COMPOUNDS)
+
         self.species_list = [species]
         self.metabolic_pathway_only = metabolic_pathway_only
         self.compound_database_str = compound_database_str
@@ -23,53 +28,15 @@ class Mapper():
 
         self.G = None
 
-        self.gene_df = None
-        self.gene_design = None
-
-        self.protein_df = None
-        self.protein_design = None
-
-        self.compound_df = None
-        self.compound_design = None
-
-    def set_gene(self, gene_df, gene_design):
-        self.gene_df = gene_df
-        self.gene_design = gene_design
-        return self
-
-    def set_protein(self, protein_df, protein_design):
-        self.protein_df = protein_df
-        self.protein_design = protein_design
-        return self
-
-    def set_compound(self, compound_df, compound_design):
-        self.compound_df = compound_df
-        self.compound_design = compound_design
-        return self
-
-    def get_dfs(self, data_type):
-        data_df = None
-        design_df = None
-        if data_type == GENOMICS:
-            data_df = self.gene_df
-            design_df = self.gene_design
-        elif data_type == PROTEOMICS:
-            data_df = self.protein_df
-            design_df = self.protein_design
-        elif data_type == METABOLOMICS:
-            data_df = self.compound_df
-            design_df = self.compound_design
-        return data_df, design_df
-
     def build(self):
 
         # map different omics entities to reactome
         results = reactome_mapping(self.gene_df, self.protein_df, self.compound_df, self.compound_database_str,
                                    self.species_list, self.metabolic_pathway_only, self.include_related_chebi)
         designs = {
-            GENOMICS: self.gene_design,
-            PROTEOMICS: self.protein_design,
-            METABOLOMICS: self.compound_design
+            GENES: self.gene_design,
+            PROTEINS: self.protein_design,
+            COMPOUNDS: self.compound_design
         }
 
         # create network graphs, can be retrieved using self._get_graph()
@@ -115,10 +82,10 @@ class Mapper():
 
     def num_nodes(self, types=None):
         if types is None:
-            types = [GENOMICS, TRANSCRIPTOMICS, PROTEOMICS, METABOLOMICS, REACTIONS, PATHWAYS]
+            types = [GENES, PROTEINS, COMPOUNDS, REACTIONS, PATHWAYS]
         else:
             types = as_list(types)
-        results = {DataTypeDict[t]: len(self.get_nodes(types=t)) for t in types}
+        results = {t: len(self.get_nodes(types=t)) for t in types}
         return results
 
     def get_neighbours(self, query_id, include_types=None, exclude_types=None):
@@ -146,7 +113,7 @@ class Mapper():
         :return: a dataframe of connected entities
         """
         res = QueryBuilder(self) \
-            .add(SingleEntity(query_id)) \
+            .add(Entity(query_id)) \
             .add(Connected(data_type=dest_type, observed=observed)) \
             .run()
         return res
@@ -177,10 +144,10 @@ class Mapper():
 
     def _add_nodes(self, results, designs):
         graph = self._get_graph()
-        data_types = [GENOMICS, PROTEOMICS, METABOLOMICS, REACTIONS, PATHWAYS]
+        data_types = [GENES, PROTEINS, COMPOUNDS, REACTIONS, PATHWAYS]
         for data_type in data_types:
 
-            display_data_type = MAPPING[data_type]
+            display_data_type = data_type
             logger.info('Processing nodes: %s' % display_data_type)
 
             # get identifier and display name columns
@@ -228,7 +195,7 @@ class Mapper():
     def _add_edges(self, results):
         data_types = [GENES_TO_PROTEINS, PROTEINS_TO_REACTIONS, COMPOUNDS_TO_REACTIONS, REACTIONS_TO_PATHWAYS]
         for data_type in data_types:
-            display_data_type = MAPPING[data_type]
+            display_data_type = data_type
             logger.info('Processing edges: %s' % display_data_type)
 
             df = self._json_str_to_df(results[data_type])
