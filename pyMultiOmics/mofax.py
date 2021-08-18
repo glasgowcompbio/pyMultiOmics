@@ -31,58 +31,55 @@ class MofaPipeline():
                  verbose: bool = False,
                  seed: int = 42):
         
-        	## (1) initialise the entry point ##
-	ent = entry_point()
+        ## (1) initialise the entry point ##
+        ent = entry_point()
 
 
-	## (2) Set data options ##
-	# - scale_groups: if groups have significantly different ranges, it is good practice to scale each group to unit variance
-	# - scale_views: if views have significantly different ranges, it is good practice to scale each view to unit variance
-	ent.set_data_options(
-		scale_groups = False, 
-		scale_views = False
-	)
+        ## (2) Set data options ##
+        # - scale_groups: if groups have significantly different ranges, it is good practice to scale each group to unit variance
+        # - scale_views: if views have significantly different ranges, it is good practice to scale each view to unit variance
+        ent.set_data_options(
+            scale_groups = False, 
+            scale_views = False)
 
-	ent.set_data_df(data)
+        ent.set_data_df(data)
 
-	# Simple (using default values)
-	ent.set_model_options()
-
-	# Advanced (using personalised values)
-	ent.set_model_options(
-		factors = 5, 
-		spikeslab_weights = True, 
-		ard_factors = True, 
-		ard_weights = True
-	)
+        # Simple (using default values)
+        ent.set_model_options()
+        
+        # Advanced (using personalised values)
+        ent.set_model_options(
+            factors = 5, 
+            spikeslab_weights = True, 
+            ard_factors = True, 
+            ard_weights = True)
 
 
-	# Simple (using default values)
-	ent.set_train_options()
+        # Simple (using default values)
+        ent.set_train_options()
 
-	# Advanced (using personalised values)
-	ent.set_train_options(
-		iter = 100, 
-		convergence_mode = "fast", 
-		startELBO = 1, 
-		freqELBO = 1, 
-		dropR2 = None, 
-		gpu_mode = False, 
-		verbose = False, 
-		seed = 42
-	)
+        # Advanced (using personalised values)
+        ent.set_train_options(
+            iter = 100, 
+            convergence_mode = "fast", 
+            startELBO = 1, 
+            freqELBO = 1, 
+            dropR2 = None, 
+            gpu_mode = False, 
+            verbose = False, 
+            seed = 42)
 
-	####################################
-	## Build and train the MOFA model ##
-	####################################
+        ####################################
+        ## Build and train the MOFA model ##
+        ####################################
 
-	# Build the model 
-	ent.build()
+        # Build the model 
+        ent.build()
 
-	# Run the model
-	ent.run()
+        # Run the model
+        ent.run()
 
-	self.model = ent
+        self.model = ent
 
 
     def save_model(self):
