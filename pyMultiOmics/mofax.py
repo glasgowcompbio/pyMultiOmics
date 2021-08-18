@@ -2,24 +2,36 @@ from mofapy2.run.entry_point import entry_point
 import pandas as pd
 import mofax as mfx
 from typing import Union
+import io
+import numpy as np
+import matplotlib.pyplot as plt
+import h5py
 
-
-def data_processing(dict_of_files):
-    data = pd.DataFrame()
-    for k in dict_of_files.keys():
-        df = pd.read_csv(dict_of_files[k], sep="\t")
-        df = df.rename(columns={df.columns[0]:'sample'})
-        for col in df.columns:
-            if col != 'sample':
-                if isinstance(df[col][1], np.float64) == False:
-                    df = df.drop(labels=col,axis=1)
-        df = df.melt(id_vars=df.columns[0],var_name = 'feature')
-        df['view'] = k
-        data = data.append(df)
-    return(data)
-
-def set_mofax_options():
-	## (1) initialise the entry point ##
+class MofaPipeline():
+    def __init__(self, mo, modelPath):
+        self.data = mo.to_mofa()
+        self.model = None
+        self.filepath = modelPath
+        self.mofa = None
+        
+    def training(self,
+                 data,
+                 scale_groups: bool = False,
+                 scale_views: bool = False,
+                 nFactors: int = 10,
+                 spikeslab_weights: bool = False,
+                 ard_factors: bool = False,
+                 ard_weights: bool = False,
+                 nIter: int = 100,
+                 convergence_mode: str = "fast",
+                 startELBO: int = 1,
+                 freqELBO: int = 1,
+                 dropR2 = None,
+                 gpu_mode: bool = False,
+                 verbose: bool = False,
+                 seed: int = 42):
+        
+        	## (1) initialise the entry point ##
 	ent = entry_point()
 
 
@@ -70,65 +82,59 @@ def set_mofax_options():
 	# Run the model
 	ent.run()
 
-	return(ent)
+	self.model = ent
 
 
-def plot_top_features(
-    m,
-    factors: Union[int] = None,
-    views: Union[str, int] = None,
-    n_features: int = None,
-    clip_threshold: float = None,
-    scale: bool = False,
-    absolute_values: bool = False,
-    only_positive: bool = False,
-    only_negative: bool = False,
-    per_view: bool = True
-):
+    def save_model(self):
+        self.model.save(self.filepath, save_data=True)
 
-    df = m.get_top_features(
-        factors = factors,
-        views = views,
-        n_features = n_features,
-        clip_threshold = clip_threshold,
-        scale = scale,
-        absolute_values = absolute_values,
-        only_positive = only_positive,
-        only_negative = only_negative,
-        per_view = per_view,
-        df = True,
-    )
+    def build_mofa(self):
+        self.mofa = mfx.mofa_model(self.filepath)
+        
+    def plot_top_features(self,
+                          factors: int = None,
+                          views: Union[str, int] = None,
+                          n_features: int = None,
+                          clip_threshold: float = None,
+                          scale: bool = False,
+                          absolute_values: bool = False,
+                          only_positive: bool = False,
+                          only_negative: bool = False,
+                          per_view: bool = True):
+        
+        df = self.mofa.get_top_features(factors = factors,
+                                        views = views,
+                                        n_features = n_features,
+                                        clip_threshold = clip_threshold,
+                                        scale = scale,
+                                        absolute_values = absolute_values,
+                                        only_positive = only_positive,
+                                        only_negative = only_negative,
+                                        per_view = per_view,
+                                        df = True)
+
+        for l in range(len(df['view'].tolist())):
+            if df['view'][l] != views:
+                df = df.drop(labels = l)
     
+        fig, ax = plt.subplots()
     
-    for l in range(len(df['view'].tolist())):
-        if df['view'][l] != views:
-            df = df.drop(labels = l)
+        ax.axes.set_xlabel('Weights')
+        ax.axes.set_ylabel('Features')
+        title = views + " factor " + str(factors)
+        ax.axes.set_title(title)
     
-    fig, ax = plt.subplots()
+        ax.axes.axvline(x=0,linewidth=0.5, color='grey',linestyle = '-.')
     
-    ax.axes.set_xlabel('Weights')
-    ax.axes.set_ylabel('Features')
-    title = views + " factor " + str(factors)
-    ax.axes.set_title(title)
+        data = df['value'].tolist()
+        data.reverse()
+        label = df['feature'].tolist()
+        label.reverse()
     
-    ax.axes.axvline(x=0,linewidth=0.5, color='grey',linestyle = '-.')
+        b = ax.barh(range(len(df['value'].tolist())), data, tick_label=label, color = 'black', height=0.05)
+        ax.scatter(data, y=label, color='black', s=40)
     
-    data = df['value'].tolist()
-    data.reverse()
-    label = df['feature'].tolist()
-    label.reverse()
+        #plt.show()
     
-    b = ax.barh(range(len(df['value'].tolist())), data, tick_label=label, color = 'black', height=0.05)
-    ax.scatter(data, y=label, color='black', s=40)
+        return(fig)
     
-    #plt.show()
-    
-    return(fig)
-
-
-
-
-
-
-
-
