@@ -176,7 +176,8 @@ class MultiOmicsData():
         for v in self.views:
             data = self.views[v]
             df = data.data_df
-            df = df.melt(var_name='feature')
+            df['feature'] = df.index
+            df = df.melt(id_vars='feature',var_name='sample')
             df['view'] = data.data_type
             res = res.append(df)
         return res

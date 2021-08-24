@@ -15,7 +15,6 @@ class MofaPipeline():
         self.mofa = None
         
     def training(self,
-                 data,
                  scale_groups: bool = False,
                  scale_views: bool = False,
                  nFactors: int = 10,
@@ -39,35 +38,28 @@ class MofaPipeline():
         # - scale_groups: if groups have significantly different ranges, it is good practice to scale each group to unit variance
         # - scale_views: if views have significantly different ranges, it is good practice to scale each view to unit variance
         ent.set_data_options(
-            scale_groups = False, 
-            scale_views = False)
+            scale_groups = scale_groups, 
+            scale_views = scale_views)
 
-        ent.set_data_df(data)
+        ent.set_data_df(self.data)
 
-        # Simple (using default values)
-        ent.set_model_options()
-        
         # Advanced (using personalised values)
         ent.set_model_options(
-            factors = 5, 
-            spikeslab_weights = True, 
-            ard_factors = True, 
-            ard_weights = True)
-
-
-        # Simple (using default values)
-        ent.set_train_options()
+            factors = nFactors, 
+            spikeslab_weights = spikeslab_weights, 
+            ard_factors = ard_factors, 
+            ard_weights = ard_weights)
 
         # Advanced (using personalised values)
         ent.set_train_options(
-            iter = 100, 
-            convergence_mode = "fast", 
-            startELBO = 1, 
-            freqELBO = 1, 
-            dropR2 = None, 
-            gpu_mode = False, 
-            verbose = False, 
-            seed = 42)
+            iter = nIter, 
+            convergence_mode = convergence_mode, 
+            startELBO = startELBO, 
+            freqELBO = freqELBO, 
+            dropR2 = dropR2, 
+            gpu_mode = gpu_mode, 
+            verbose = verbose, 
+            seed = seed)
 
         ####################################
         ## Build and train the MOFA model ##

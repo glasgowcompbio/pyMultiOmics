@@ -23,6 +23,7 @@ networkx = "*"
 tzlocal = "*"
 pals-pathway = "*"
 mofax = "*"
+mofapy2 = "*"
 
 [dev-packages]
 twine = "*"
