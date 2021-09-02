@@ -179,6 +179,7 @@ class MultiOmicsData():
             df['feature'] = df.index
             df = df.melt(id_vars='feature',var_name='sample')
             df['view'] = data.data_type
+            df = df.join(data.design_df, on = 'sample')
             res = res.append(df)
         return res
 
