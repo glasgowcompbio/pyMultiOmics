@@ -9,7 +9,7 @@ import h5py
 
 class MofaPipeline():
     def __init__(self, MultiOmicsData_obj: object = None, modelPath: str = None):
-        self.MultiOmicsData_obj = mo
+        self.MultiOmicsData_obj = MultiOmicsData_obj
         self.data = None
         self.model = None
         self.filepath = modelPath
