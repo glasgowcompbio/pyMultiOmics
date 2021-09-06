@@ -117,7 +117,7 @@ class MofaPipeline():
     
         ax.axes.set_xlabel('Weights')
         ax.axes.set_ylabel('Features')
-        title = views + " factor " + str(factors)
+        title = views + " factor " + str(factors+1)
         ax.axes.set_title(title)
     
         ax.axes.axvline(x=0,linewidth=0.5, color='grey',linestyle = '-.')
