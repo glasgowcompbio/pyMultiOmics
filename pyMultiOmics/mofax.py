@@ -48,6 +48,8 @@ class MofaPipeline():
             scale_groups = scale_groups, 
             scale_views = scale_views)
 
+        self.data.drop_duplicates(subset=["group","view","feature","sample"], 
+                                  keep='first', inplace=True)
         ent.set_data_df(self.data)
 
         # Advanced (using personalised values)
