@@ -22,8 +22,8 @@ bioservices = "*"
 networkx = "*"
 tzlocal = "*"
 pals-pathway = "*"
-mofax = "*"
 mofapy2 = "*"
+mofax = "*"
 
 [dev-packages]
 twine = "*"

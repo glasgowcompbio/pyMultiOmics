@@ -79,10 +79,10 @@ class SingleOmicsData():
 
     def _drop_dupes_by_values(self, df, label):
         # drop duplicate rows, keep no duplicates
-        no_dupe_rows = df.drop_duplicates(keep=False)
+        no_dupe_rows = df.drop_duplicates(keep='first')
 
         # drop duplicate columns, keep no duplicates
-        no_dupe = no_dupe_rows.transpose().drop_duplicates(keep=False).transpose()
+        no_dupe = no_dupe_rows.transpose().drop_duplicates(keep='first').transpose()
 
         # print message is something has been dropped
         if df.shape != no_dupe.shape:
