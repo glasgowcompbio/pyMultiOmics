@@ -66,7 +66,7 @@ class SingleOmicsData():
     def _clean_data(self, measurement_df, design_df):
 
         # drop duplicate rows and columns by values
-        measurement_df = self._drop_dupes_by_values(measurement_df, MEASUREMENT_DF_LABEL)
+        # measurement_df = self._drop_dupes_by_values(measurement_df, MEASUREMENT_DF_LABEL)
         # design_df = self._drop_dupes_by_values(design_df, DESIGN_DF_LABEL) # don't do this!
 
         # drop duplicate rows and columns by sample names
