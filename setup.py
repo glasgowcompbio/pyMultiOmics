@@ -4,7 +4,7 @@ with open('README.md', 'r', encoding='utf-8') as fh:
     long_description = fh.read()
 setup(
     name='pyMultiOmics',
-    version='1.0.0',
+    version='1.0.1',
     author='Joe Wandy',
     author_email='joe.wandy@glasgow.ac.uk',
     description='A Python package for multi-omics data integration and analysis',

@@ -1,0 +1,28 @@
+name: pyMultiOmics
+channels:
+- conda-forge
+dependencies:
+  - numpy
+  - scipy
+  - pandas
+  - seaborn
+  - scikit-learn
+  - matplotlib
+  - plotly
+  - statsmodels
+  - loguru
+  - requests
+  - tqdm
+  - pillow
+  - jupyterlab
+  - bioservices
+  - networkx
+  - tzlocal
+  - pip
+  - pip:
+     - neo4j-driver==1.7.6
+     - pals-pathway
+     - mofapy2
+     - mofax
+     - twine
+     - build
