@@ -24,7 +24,7 @@ setup(
         ],
     },
     install_requires=['numpy', 'scipy', 'pandas', 'seaborn', 'scikit-learn', 'matplotlib', 'plotly',
-                      'statsmodels', 'loguru', 'requests', 'neo4j-driver==1.7.6',
+                      'statsmodels', 'loguru', 'requests', 'neo4j-driver',
                       'tqdm', 'pillow', 'jupyterlab', 'bioservices', 'networkx', 'tzlocal', 'pals-pathway',
                       'mofapy2', 'mofax'],
 )
