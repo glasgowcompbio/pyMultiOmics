@@ -4,7 +4,7 @@ with open('README.md', 'r', encoding='utf-8') as fh:
     long_description = fh.read()
 setup(
     name='pyMultiOmics',
-    version='1.0.1',
+    version='1.0.2',
     author='Joe Wandy',
     author_email='joe.wandy@glasgow.ac.uk',
     description='A Python package for multi-omics data integration and analysis',
@@ -25,5 +25,6 @@ setup(
     },
     install_requires=['numpy', 'scipy', 'pandas', 'seaborn', 'scikit-learn', 'matplotlib', 'plotly',
                       'statsmodels', 'loguru', 'requests', 'neo4j-driver==1.7.6',
-                      'tqdm', 'pillow', 'jupyterlab', 'bioservices', 'networkx', 'tzlocal', 'pals-pathway'],
+                      'tqdm', 'pillow', 'jupyterlab', 'bioservices', 'networkx', 'tzlocal', 'pals-pathway',
+                      'mofapy2', 'mofax'],
 )
