@@ -4,6 +4,7 @@ import networkx as nx
 import pandas as pd
 from loguru import logger
 
+from .analysis import AnalysisPipeline
 from .common import as_list
 from .constants import REACTIONS, PROTEINS, COMPOUNDS, GENES, PATHWAYS, COMPOUND_DATABASE_CHEBI, PKS, IDS, NA, \
     GENES_TO_PROTEINS, PROTEINS_TO_REACTIONS, COMPOUNDS_TO_REACTIONS, REACTIONS_TO_PATHWAYS
@@ -112,7 +113,8 @@ class Mapper():
         :param observed: True to get entities observed in the data, False to retrieve everything mapped by Reactome
         :return: a dataframe of connected entities
         """
-        res = QueryBuilder(self) \
+        ap = AnalysisPipeline(self.multi_omics_data, self)
+        res = QueryBuilder(ap) \
             .add(Entity(query_id)) \
             .add(Connected(data_type=dest_type, observed=observed)) \
             .run()
