@@ -1,95 +1,119 @@
-from collections import defaultdict
+import json
+import shutil
+from urllib.parse import quote
 
-import numpy as np
 import pandas as pd
 import requests
-import shutil
+from loguru import logger
 
-def download_reactome_plot(stId, out_file, species=None, expression_dict=None):
 
-    # Calls https://reactome.org/ContentService/#/exporter/diagramImageUsingGET_1
+def download_reactome_diagram(stId, out_file, species=None, expression_dict=None):
+    """
+    Download a reaction or pathway diagram from Reactome.
+    If provided, the downloaded diagram can be overlaid with the expression data.
+
+    Args:
+        stId: the Reactome's stable ID of the reaction or pathway to download, e.g. 'R-HSA-70921'
+        out_file: the name of output file containing the image
+        species: the name of the species. Useful constants are defined in pyMultiOmics.constants.
+        expression_dict: a dictionary of expression values to colour in the diagram, e.g.
+                        {
+                            'C00135': 1.0,           # kegg
+                            'C01342': 2.0,           # kegg
+                            '30817': 3.0,            # ChEBI
+                            'HAL': 4.0,              # gene name
+                            'ENSG00000172508': 5.0,  # ensembl
+                            'Q96NU7': 6.0            # uniprot
+                        }
+
+    Returns: None
+
+    """
+
+    # if expression data is available, send it to Reactome Analysis service and get back a token.
+    reactome_token = None
+    if expression_dict is not None:
+        assert species is not None
+        expression_df = pd.DataFrame.from_dict(expression_dict.items()).set_index(0)
+        expression_df = expression_df.rename(columns={1: 'value'})
+        expression_df.index.name = '#id'
+
+        # Submit expression data to Reactome Analysis service
+        expression_data = expression_df.to_csv(sep='\t', header=True, index_label='#id',
+                                               float_format='%.15f')
+        encoded_species = quote(species)
+
+        status_code, json_response = send_reactome_expression_data(expression_data,
+                                                                   encoded_species)
+        if status_code == 200:
+            pathways_df, reactome_url, reactome_token = parse_reactome_json(json_response)
+
+    # Generate diagram by calling Reactome Exporter service.
+    # The API is documented here:
+    # https://reactome.org/ContentService/#/exporter/diagramImageUsingGET_1
     image_url = 'https://reactome.org/ContentService/exporter/diagram/%s.png?quality=8' \
                 '&diagramProfile=standard&analysisProfile=strosobar' % stId
 
-    # if expression data is available
-    expression_df = pd.DataFrame.from_dict(expression_dict.items()).set_index(0)
-    expression_df = expression_df.rename(columns={1: 'log_FC'})
-    expression_df.index.name = '#id'
+    # If we have an analysis token, then include it for diagram export too.
+    if reactome_token is not None:
+        image_url += '&token=%s&resource=TOTAL&expColumn=0' % reactome_token
 
-    expression_data = expression_df.to_csv(sep='\t', header=True, index_label='#id', float_format='%.15f')
-    encoded_species = quote(species)
-
+    # Save image_url to file
     r = requests.get(image_url, stream=True)
     if r.status_code == 200:
         with open(out_file, 'wb') as f:
             r.raw.decode_content = True
             shutil.copyfileobj(r.raw, f)
-
-            # if token is not None:
-    #     image_url += '&token=%s&resource=TOTAL&expColumn=0' % token
+            logger.debug('Image saved to %s' % out_file)
 
 
-# def send_expression_data(ds, case, control, species):
-#     # send expression data to reactome for diagram exporter
-#     int_df = ds.change_zero_peak_ints()
-#     annot_df = ds.get_annotations()
-#     design = ds.get_experimental_design()
-#
-#     case_cols = design['groups'][case]
-#     control_cols = design['groups'][control]
-#
-#     df = annot_df.join(int_df).set_index('entity_id').sort_index()
-#     case_df = np.log2(df[case_cols])
-#     control_df = np.log2(df[control_cols])
-#     lfcs = np.mean(case_df, axis=1) - np.mean(control_df, axis=1)
-#
-#     # for each compound, compute the average fold changes if there are multiple values
-#     # TODO: we need a better way to do this
-#     temp = defaultdict(list)
-#     for idx, lfc in lfcs.iteritems():
-#         temp[idx].append(lfc)
-#
-#     fold_changes = {}
-#     for idx in temp:
-#         mean = np.mean(temp[idx])
-#         # logger.debug(idx, mean)
-#         fold_changes[idx] = mean
-#
-#     # create expression dataframe to send to reactome
-#     expression_df = pd.DataFrame.from_dict(fold_changes.items()).set_index(0)
-#     expression_df = expression_df.rename(columns={1: 'log_FC'})
-#     expression_df.index.name = '#id'
-#
-#     expression_data = expression_df.to_csv(sep='\t', header=True, index_label='#id', float_format='%.15f')
-#     encoded_species = quote(species)
-#
-#     status_code, json_response = send_reactome_expression_data(expression_data, encoded_species)
-#     if status_code == 200:
-#         pathways_df, reactome_url, reactome_token = parse_reactome_json(json_response)
-#         return reactome_token
-#     else:
-#         st.warning('Failed to submit expression data to Reactome.org (status_code=%d)' % status_code)
-#         return None
-#
-# def show_reactome_diagram(df, json_response, pw_name, stId, token):
-#     # st.subheader(pw)
-#     label = '%s: %s' % (stId, pw_name)
-#     info_url = 'https://reactome.org/content/detail/%s' % stId
-#     header_markdown = '### %s [[info]](%s)' % (label, info_url)
-#     if token is not None:
-#         viewer_url = 'https://reactome.org/PathwayBrowser/#/%s&DTAB=AN&ANALYSIS=%s' % (stId, token)
-#         header_markdown += ' [[viewer]](%s)' % viewer_url
-#     st.write(header_markdown)
-#
-#     row = df.loc[stId]
-#     st.write(row)
-#     for summation in json_response['summation']:
-#         summary = summation['text']
-#         st.write(summary)
-#
-#     image_url = 'https://reactome.org/ContentService/exporter/diagram/%s.png?quality=8' \
-#                 '&diagramProfile=standard&analysisProfile=strosobar' % stId
-#     if token is not None:
-#         image_url += '&token=%s&resource=TOTAL&expColumn=0' % token
-#     logger.debug('image_url = %s' % image_url)
-#     st.image(image_url, use_column_width=True)
+def send_reactome_expression_data(data, encoded_species):
+    """
+    Send expression data to Reactome Analysis service.
+    API doc: https://reactome.org/AnalysisService/#/identifiers/getPostTextUsingPOST
+    The data format is described here: https://reactome.org/dev/analysis
+
+    Args:
+        data: the data to send in tsv format
+        encoded_species: the name of the species
+
+    Returns: HTTP status code and a JSON response that can be parsed by parse_reactome_json()
+
+    """
+
+    url = 'https://reactome.org/AnalysisService/identifiers/?interactors=false&species=' + \
+          encoded_species + '&sortBy=ENTITIES_PVALUE&order=ASC&resource=TOTAL&pValue=1&includeDisease=true'
+    logger.debug('POSTing expression data to Reactome Analysis Service: ' + url)
+
+    response = requests.post(url, headers={'Content-Type': 'text/plain'},
+                             data=data.encode('utf-8'))
+    logger.debug('Received HTTP status code: %d' % response.status_code)
+
+    status_code = response.status_code
+    if status_code == 200:
+        json_response = json.loads(response.text)
+    else:
+        json_response = None
+    return status_code, json_response
+
+
+def parse_reactome_json(json_response):
+    """
+    Parse the JSON returned by Reactome Analysis service
+    Args:
+        json_response: the JSON response
+
+    Returns: a pathway dataframe containing p-values of pathways from over-representation analysis,
+             the reactome URL used to submit the data to, and an analysis token
+
+    """
+    # see https://reactome.org/userguide/analysis for results explanation
+    token = json_response['summary']['token']
+    pathways = json_response['pathways']
+
+    reactome_url = 'https://reactome.org/PathwayBrowser/#DTAB=AN&ANALYSIS=' + token
+    logger.debug('Received expression analysis token: ' + token)
+
+    # https://stackoverflow.com/questions/6027558/flatten-nested-dictionaries-compressing-keys
+    pathways_df = pd.json_normalize(pathways, sep='_')
+    return pathways_df, reactome_url, token
