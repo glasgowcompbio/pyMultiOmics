@@ -110,3 +110,8 @@ notebooks/*.png
 notebooks/test_data/synthetic/
 notebooks/test_data/
 test_output.csv
+notebooks/__MACOSX
+notebooks/covid19_dualomics_data
+notebooks/covid19_multiomics_data
+notebooks/zebrafish_data
+notebooks/aging_data

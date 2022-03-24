@@ -554,8 +554,7 @@ def get_reactome_description(reactome_id, from_parent=False):
         }
         query_res = session.run(query, params)
         logger.debug(query)
-        record_list = list(query_res.records())
-        results = list(map(lambda x: x.data(), record_list))
+        results = query_res.data()
         first_data = results[0]
         is_inferred = first_data['inferred']
     finally:
