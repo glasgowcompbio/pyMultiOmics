@@ -3,23 +3,31 @@ import pandas as pd
 from loguru import logger
 from scipy import stats
 from sklearn import preprocessing
+from sklearn.preprocessing import MinMaxScaler
 from sklearn.decomposition import PCA
 from statsmodels.sandbox.stats.multicomp import multipletests
+import pylab as plt
+import seaborn as sns
 
 from .constants import GROUP_COL, IDS, PKS
 
 
 class WebOmicsInference(object):
-    def __init__(self, data_df, design_df, data_type, remove_cols=None, min_value=0, replace_mean=True):
+    def __init__(self, data_df, design_df, data_type, remove_cols=None, min_value=0,
+                 replace_mean=True):
 
         data_df = data_df.copy()
 
         # remove all the default columns from dataframe if nothing provided
-        if remove_cols is None:
-            remove_cols = ['padj_', 'FC_', 'significant_', 'obs', PKS[data_type], IDS[data_type]]
-        remove_cols = tuple([x.lower() for x in remove_cols])
-        to_drop = list(filter(lambda x: x.lower().startswith(remove_cols), data_df.columns))
-        df = data_df.drop(to_drop, axis=1)
+        try:
+            if remove_cols is None:
+                remove_cols = ['padj_', 'FC_', 'significant_', 'obs', PKS[data_type],
+                               IDS[data_type]]
+            remove_cols = tuple([x.lower() for x in remove_cols])
+            to_drop = list(filter(lambda x: x.lower().startswith(remove_cols), data_df.columns))
+            df = data_df.drop(to_drop, axis=1)
+        except KeyError:
+            df = data_df
 
         # remove rows that are all NAs and all 0s
         df = df.dropna(how='all')
@@ -34,18 +42,7 @@ class WebOmicsInference(object):
         # - replace any other zeros with mean of group
         self._impute_data(min_value, replace_mean=replace_mean)
 
-    # def heatmap(self, N=None, standardize=True, log=False):
-    #     if standardize:
-    #         data_df = self.standardize_df(self.data_df, log=log)
-    #     else:
-    #         data_df = self.data_df
-    #     if N is not None:
-    #         plt.matshow(data_df[0:N])
-    #     else:
-    #         plt.matshow(data_df)
-    #     plt.colorbar()
-
-    def standardize_df(self, data_df, log=False, axis=1):
+    def standardize_df(self, data_df, log=False, axis=1, method='standard'):
         if data_df.empty:
             return data_df
         data_df = data_df.copy()
@@ -56,8 +53,15 @@ class WebOmicsInference(object):
         if np.all(data_arr >= 0) and log:
             data_arr = np.log(data_arr)
 
-        # center data to have 0 mean and unit variance for heatmap and pca
-        scaled_data = preprocessing.scale(data_arr, axis=axis)
+        assert method in ['standard', 'minmax']
+        if method == 'standard':
+            # center data to have 0 mean and unit variance for heatmap and pca
+            scaled_data = preprocessing.scale(data_arr, axis=axis)
+
+        elif method == 'minmax':
+            scaler = MinMaxScaler()
+            scaled_data = scaler.fit_transform(data_arr.transpose())
+            scaled_data = scaled_data.transpose()
 
         # set the values back to the dataframe
         sample_names = data_df.columns
@@ -138,6 +142,42 @@ class WebOmicsInference(object):
         cumsum = np.cumsum(pca.explained_variance_ratio_)
         return X, cumsum
 
+    def plot_PCA(self, std_method, log=False, n_components=10, hue=None, style=None,
+                 palette='bright', return_fig=False):
+        assert std_method is not None
+        df = self.standardize_df(self.data_df, log=log, method=std_method)
+
+        pca = PCA(n_components=n_components)
+        pcs = pca.fit_transform(df)
+        pc1_values = pcs[:, 0]
+        pc2_values = pcs[:, 1]
+
+        sns.set_context('poster')
+        fig = plt.figure(figsize=(10, 5))
+
+        palette = None if hue is None else palette
+        g = sns.scatterplot(x=pc1_values, y=pc2_values, hue=hue, style=style, palette=palette)
+        if hue is not None:
+            g.legend(loc='center left', bbox_to_anchor=(1, 0.5), ncol=1, fontsize=12)
+
+        print('PCA explained variance', pca.explained_variance_ratio_.cumsum())
+
+        if return_fig:
+            return pc1_values, pc2_values, fig
+        else:
+            return pc1_values, pc2_values
+
+    def heatmap(self, N=None, std_method=None, log=False):
+        data_df = self.data_df
+        if std_method is not None:
+            data_df = self.standardize_df(self.data_df, log=log, method=std_method)
+        if N is not None:
+            data_df = data_df[0:N]
+
+        sns.set_context('poster')
+        plt.figure(figsize=(10, 10))
+        sns.heatmap(data_df)
+
     def _impute_data(self, min_value, replace_mean=True):
         if self.design_df is not None:
             grouping = self.design_df.groupby('group')
@@ -151,7 +191,8 @@ class WebOmicsInference(object):
                 if replace_mean:
                     # replace any other zeros with mean of group
                     subset_df = self.data_df.loc[:, samples]
-                    self.data_df.loc[:, samples] = subset_df.mask(subset_df == 0, subset_df.mean(axis=1), axis=0)
+                    self.data_df.loc[:, samples] = subset_df.mask(subset_df == 0,
+                                                                  subset_df.mean(axis=1), axis=0)
                 else:
                     # replace all 0s with min_value
                     self.data_df = self.data_df.replace(0, min_value)

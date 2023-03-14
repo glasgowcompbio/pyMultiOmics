@@ -55,6 +55,7 @@ PROTEINS_TO_REACTIONS = 'protein_reactions'
 COMPOUNDS_TO_REACTIONS = 'compound_reactions'
 REACTIONS_TO_PATHWAYS = 'reaction_pathways'
 MULTI_OMICS = 'multi_omics'
+CIC_COMPOUNDS = 'cic_compounds'
 
 PKS = {
     GENES: GENE_PK,
