@@ -2,7 +2,7 @@ from loguru import logger
 
 from .constants import GENES, PROTEINS, COMPOUNDS, REACTIONS, PATHWAYS, SMALL, GENES, INFERENCE_T_TEST, \
     INFERENCE_DESEQ, INFERENCE_LIMMA
-from .pipelines import WebOmicsInference
+from .pipelines import Inference
 
 
 class AnalysisPipeline(object):
@@ -107,7 +107,7 @@ class TTestAnalysis(CaseControlAnalysis):
 
     def run(self):
         min_replace = SMALL
-        self.wi = WebOmicsInference(self.data_df, self.design_df, self.data_type, min_value=min_replace)
+        self.wi = Inference(self.data_df, self.design_df, self.data_type, min_value=min_replace)
         self.results = self.wi.run_ttest(self.case, self.control)
 
     def get_analysis_type(self):
@@ -126,8 +126,8 @@ class DESeq2Analysis(CaseControlAnalysis):
         MIN_VALUE = 1
         KEEP_THRESHOLD = 10
         REPLACE_MEAN = False
-        self.wi = WebOmicsInference(self.data_df, self.design_df, self.data_type, min_value=MIN_VALUE,
-                                    replace_mean=REPLACE_MEAN)
+        self.wi = Inference(self.data_df, self.design_df, self.data_type, min_value=MIN_VALUE,
+                            replace_mean=REPLACE_MEAN)
         try:
             pd_df, rld_df, res_ordered = self.wi.run_deseq(KEEP_THRESHOLD, self.case, self.control)
             self.results = pd_df[['padj', 'log2FoldChange']]
@@ -148,7 +148,7 @@ class LimmaAnalysis(CaseControlAnalysis):
     def run(self):
         min_replace = SMALL
         try:
-            self.wi = WebOmicsInference(self.data_df, self.design_df, self.data_type, min_value=min_replace)
+            self.wi = Inference(self.data_df, self.design_df, self.data_type, min_value=min_replace)
             self.results = self.wi.run_limma(self.case, self.control)
         except Exception as e:
             logger.warning('Failed to run limma: %s' % str(e))

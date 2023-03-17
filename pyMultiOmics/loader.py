@@ -46,7 +46,7 @@ def load_affinity_data(file_name):
     df.fillna(SMALL, inplace=True)
 
     # Log the values
-    df = np.log(df)
+    # df = np.log(df)
 
     sample_metadata_df.index.name = 'sample'
     sample_metadata_df.index = sample_metadata_df.index.astype(str)

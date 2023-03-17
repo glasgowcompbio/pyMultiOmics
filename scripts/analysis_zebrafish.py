@@ -109,4 +109,4 @@ heatmap_df = heatmap_df[selection]
 heatmap_df
 
 from plotly import express as px
-px.imshow(wi.standardize_df(heatmap_df, log=True, axis=0))
+px.imshow(wi.normalise_df(heatmap_df, log=True, axis=0))
