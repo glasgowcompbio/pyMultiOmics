@@ -42,13 +42,26 @@ def load_affinity_data(file_name):
     # Convert all columns to float, handling '< LOD' as NaN
     df = df.apply(pd.to_numeric, errors='coerce')
 
+    # Determine the threshold count as 10% of the number of samples
+    thresh_count = int(df.shape[1] * 0.1)
+
+    # drop rows with all NaN values below the threshold count in data_df
+    df = df.dropna(thresh=df.shape[1] - thresh_count + 1)
+
     # Replace NaN values with a small value
     df.fillna(SMALL, inplace=True)
+
+    # get the indices of the remaining rows in data_df
+    remaining_indices = df.index
+
+    # drop rows with the same indices from feature_metadata_df
+    feature_metadata_df = feature_metadata_df.loc[remaining_indices]
 
     # Log the values
     # df = np.log(df)
 
     sample_metadata_df.index.name = 'sample'
     sample_metadata_df.index = sample_metadata_df.index.astype(str)
+    sample_metadata_df = sample_metadata_df.astype(str)
 
     return df, sample_metadata_df, feature_metadata_df

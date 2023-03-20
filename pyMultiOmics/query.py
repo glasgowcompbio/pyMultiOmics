@@ -80,7 +80,7 @@ class Entity(Query):
         self.node_ids = as_list(node_ids)
 
     def run(self, pipeline, _):
-        mapping = pipeline.mapping
+        mapping = pipeline.get_mapping()
         data = []
         for node_id in self.node_ids:
             try:
@@ -99,7 +99,7 @@ class Select(Query):
         self.data_types = as_list(data_types)
 
     def run(self, pipeline, previous_query):
-        mapping = pipeline.mapping
+        mapping = pipeline.get_mapping()
         # get all nodes of data_type from the mapping object
         res = mapping.get_nodes(types=self.data_types)
         node_ids = [node_id for node_id, node_data in res]
@@ -118,7 +118,7 @@ class Connected(Query):
         self.observed = observed
 
     def run(self, pipeline, previous_query):
-        mapping = pipeline.mapping
+        mapping = pipeline.get_mapping()
         previous_res = previous_query.get_result()
         node_ids = previous_res.index.values
         possible_obs = as_list(self.observed) if self.observed is not None else [True, False]

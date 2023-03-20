@@ -62,10 +62,10 @@ class Inference(object):
         # replace all 0s with min_value
         self.data_df = self.data_df.replace(0, min_value)
 
-    def normalise(self, kind, log, std_method):
+    def normalise(self, kind, log, normalise):
         # df is features X samples, and it's normalised along the feature axis
         # if doing PCA on the samples, transpose the df so it goes the right way
-        df = self._normalise_df(self.data_df, log=log, method=std_method)
+        df = self._normalise_df(self.data_df, log=log, method=normalise)
         df = df.transpose() if kind == 'samples' else df
         return df
 
@@ -94,13 +94,13 @@ class Inference(object):
         data_df[sample_names] = scaled_data
         return data_df
 
-    def run_deseq_features(self, keep_threshold, case, control):
+    def run_deseq(self, keep_threshold, case, control):
         logger.info('DeSEQ2 support is not available, please install rpy2 extra package')
 
-    def run_limma_features(self, case, control):
+    def run_limma(self, case, control):
         logger.info('limma support is not available, please install rpy2 extra package')
 
-    def run_ttest_features(self, case, control, log=False):
+    def run_ttest(self, case, control, log=False):
         logger.info('t-test case is %s, control is %s' % (case, control))
         count_data = self.data_df
         col_data = self.design_df
@@ -147,57 +147,3 @@ class Inference(object):
             'log2FoldChange': lfcs
         }, index=indices)
         return result_df
-
-    def PCA(self, normalise=None, log=False, n_components=10, hue=None, style=None,
-            palette='bright', return_fig=False, kind='samples'):
-        assert kind in ['samples', 'features']
-
-        df = self.normalise(kind, log, normalise)
-
-        pca = PCA(n_components=n_components)
-        pcs = pca.fit_transform(df)
-        pc1_values = pcs[:, 0]
-        pc2_values = pcs[:, 1]
-
-        sns.set_context('poster')
-        fig = plt.figure(figsize=(10, 5))
-
-        palette = None if hue is None else palette
-        g = sns.scatterplot(x=pc1_values, y=pc2_values, hue=hue, style=style, palette=palette)
-        if hue is not None:
-            g.legend(loc='center left', bbox_to_anchor=(1, 0.5), ncol=1, fontsize=12)
-
-        print('PCA explained variance', pca.explained_variance_ratio_.cumsum())
-
-        if return_fig:
-            return pc1_values, pc2_values, fig
-        else:
-            return pc1_values, pc2_values
-
-    def heatmap(self, N=None, normalise=None, log=False, kind='samples'):
-        assert kind in ['samples', 'features']
-
-        df = self.normalise(kind, log, normalise)
-
-        # select the first N rows for heatmap
-        if N is not None:
-            df = df[0:N]
-
-        sns.set_context('poster')
-        plt.figure(figsize=(10, 10))
-        sns.heatmap(df)
-
-    def cluster(self, n_clusters, normalise=None, log=False, kind='samples'):
-        assert kind in ['samples', 'features']
-
-        df = self.normalise(kind, log, normalise)
-
-        # initialize the KMeans model with the number of clusters
-        kmeans = KMeans(n_clusters=n_clusters)
-
-        # fit the data to the model
-        kmeans.fit(df)
-        labels = kmeans.labels_
-        centroids = kmeans.cluster_centers_
-
-        return labels, centroids

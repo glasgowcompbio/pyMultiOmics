@@ -1,5 +1,6 @@
 import json
 
+import neo4j
 import networkx as nx
 import pandas as pd
 from loguru import logger
@@ -31,22 +32,27 @@ class Mapper():
 
     def build(self):
 
-        # map different omics entities to reactome
-        results = reactome_mapping(self.gene_df, self.protein_df, self.compound_df, self.compound_database_str,
-                                   self.species_list, self.metabolic_pathway_only, self.include_related_chebi)
-        designs = {
-            GENES: self.gene_design,
-            PROTEINS: self.protein_design,
-            COMPOUNDS: self.compound_design
-        }
-
         # create network graphs, can be retrieved using self._get_graph()
         self.G = nx.Graph()
 
-        # add nodes and edges from mapping results to the graph
-        self._add_nodes(results, designs)
-        self._add_edges(results)
-        self._cleanup()
+        try:
+
+            # map different omics entities to reactome
+            results = reactome_mapping(self.gene_df, self.protein_df, self.compound_df, self.compound_database_str,
+                                       self.species_list, self.metabolic_pathway_only, self.include_related_chebi)
+            designs = {
+                GENES: self.gene_design,
+                PROTEINS: self.protein_design,
+                COMPOUNDS: self.compound_design
+            }
+
+            # add nodes and edges from mapping results to the graph
+            self._add_nodes(results, designs)
+            self._add_edges(results)
+            self._cleanup()
+
+        except neo4j.exceptions.ServiceUnavailable:
+            logger.warning('Unable to connect to neo4j database')
 
         logger.info('Created a multi-omics network with %d nodes and %d edges' %
                     (len(self.G.nodes), len(self.G.edges)))

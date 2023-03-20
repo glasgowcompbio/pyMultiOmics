@@ -3,6 +3,8 @@ import os, sys
 import pandas as pd
 from loguru import logger
 
+from pyMultiOmics.base import SingleOmicsData, MultiOmicsData
+
 sys.path.append('..')
 
 from pyMultiOmics.constants import *
@@ -13,7 +15,7 @@ from pyMultiOmics.query import *
 from pyMultiOmics.pipelines import *
 
 
-DATA_FOLDER = os.path.abspath(os.path.join('..', 'notebooks', 'test_data', 'zebrafish_data'))
+DATA_FOLDER = os.path.abspath(os.path.join('..', 'notebooks', 'zebrafish_data'))
 gene_data = pd.read_csv(os.path.join(DATA_FOLDER, 'gene_data_combined.csv'), index_col='Identifier')
 gene_design = pd.read_csv(os.path.join(DATA_FOLDER, 'gene_design.csv'), index_col='sample')
 protein_data = pd.read_csv(os.path.join(DATA_FOLDER, 'protein_data.csv'), index_col='Uniprot')
@@ -22,15 +24,21 @@ compound_data = pd.read_csv(os.path.join(DATA_FOLDER, 'compound_data_kegg.csv'),
 compound_design = pd.read_csv(os.path.join(DATA_FOLDER, 'compound_design.csv'), index_col='sample')
 
 set_log_level_info()
-m = Mapper(DANIO_RERIO, metabolic_pathway_only=True) \
-        .set_gene(gene_data, gene_design) \
-        .set_protein(protein_data, protein_design) \
-        .set_compound(compound_data, compound_design) \
+
+gene_so = SingleOmicsData(GENES, gene_data, gene_design)
+prot_so = SingleOmicsData(GENES, protein_data, protein_design)
+comp_so = SingleOmicsData(GENES, compound_data, compound_design)
+
+mo = MultiOmicsData()
+mo.add_data([gene_so, prot_so, comp_so])
+
+m = Mapper(mo, DANIO_RERIO, metabolic_pathway_only=True) \
         .build()
 
-ap = AnalysisPipeline(m)
+ap = AnalysisPipeline(mo, m)
 
-method = INFERENCE_DESEQ
+# method = INFERENCE_DESEQ
+method = INFERENCE_T_TEST
 ap.run_de(method, GENES, 'Distal', 'Proximal')
 ap.run_de(method, GENES, 'Distal', 'Middle')
 ap.run_de(method, GENES, 'Proximal', 'Middle')
@@ -109,4 +117,4 @@ heatmap_df = heatmap_df[selection]
 heatmap_df
 
 from plotly import express as px
-px.imshow(wi.normalise_df(heatmap_df, log=True, axis=0))
+px.imshow(wi._normalise_df(heatmap_df, log=True))
