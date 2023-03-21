@@ -25,5 +25,7 @@ dependencies:
      - pals-pathway
      - mofapy2
      - mofax
+     - adjusttext
+     - papermill
      - twine
      - build

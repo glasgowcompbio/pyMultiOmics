@@ -11,12 +11,12 @@ from neo4j import GraphDatabase, basic_auth
 def get_neo4j_driver():
     NEO4J_SERVER = os.getenv('NEO4J_SERVER', 'bolt://localhost:7687')
     if 'NEO4J_SERVER' not in os.environ:
-        logger.warning('Using a default neo4j server: %s' % NEO4J_SERVER)
+        logger.info('Using a default neo4j server: %s' % NEO4J_SERVER)
 
     NEO4J_USER = os.getenv('NEO4J_USER', 'neo4j')
     NEO4J_PASSWORD = os.getenv('NEO4J_PASSWORD', 'neo4j')
     if 'NEO4J_USER' not in os.environ or 'NEO4J_PASSWORD' not in os.environ:
-        logger.warning('Using a default neo4j username or password: %s' % NEO4J_USER)
+        logger.info('Using a default neo4j username or password: %s' % NEO4J_USER)
 
     try:
         neo4j_driver = GraphDatabase.driver(NEO4J_SERVER,

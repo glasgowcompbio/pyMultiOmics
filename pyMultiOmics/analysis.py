@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import pylab as plt
 import seaborn as sns
+from adjustText import adjust_text
 from loguru import logger
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
@@ -140,7 +141,7 @@ class AnalysisPipeline(object):
         return pc1_values, pc2_values
 
     def heatmap(self, data_type, N=None, normalise=None, log=False, return_fig=False,
-                kind='samples'):
+                kind='samples', selected_cluster=None, cluster_labels=None):
         assert kind in ['samples', 'features']
 
         data_df, design_df = self.multi_omics_data.get_dfs(data_type)
@@ -152,10 +153,20 @@ class AnalysisPipeline(object):
         if N is not None:
             df = df[0:N]
 
+        # select a cluster to display in the heatmap
+        if selected_cluster is not None and cluster_labels is not None:
+
+            # select indices of cluster_labels that are the same as selected_cluster
+            selected_indices = np.where(cluster_labels == selected_cluster)[0]
+
+            # then select rows in df that correspond to the indices above
+            df = df.iloc[selected_indices]
+
         if return_fig:
             sns.set_context('poster')
             fig = plt.figure(figsize=(10, 10))
             sns.heatmap(df)
+            print(df.shape)
 
         return df
 
@@ -176,7 +187,8 @@ class AnalysisPipeline(object):
                 labels = kmeans.fit_predict(df)
                 silhouette_avg = silhouette_score(df, labels)
                 silhouette_scores.append(silhouette_avg)
-            best_n_clusters = np.argmax(silhouette_scores) + 2  # add 2 because we started at 2 clusters
+            best_n_clusters = np.argmax(
+                silhouette_scores) + 2  # add 2 because we started at 2 clusters
 
         # plot the scores
         if return_fig and n_clusters is None:
@@ -194,7 +206,7 @@ class AnalysisPipeline(object):
 
         return labels, centroids, silhouette_scores
 
-    def volcano(self, df, p_value_colname, p_value_thresh, fc_colname, fc_iqr_thresh=1.5):
+    def volcano(self, df, p_value_colname, p_value_thresh, fc_colname, fc_iqr_thresh=1.5, top_n=None):
         """
         This function generates a volcano plot of the given DataFrame using matplotlib.
 
@@ -209,7 +221,7 @@ class AnalysisPipeline(object):
         sig_mask, fc_mask, combined_mask = self.filter_de_df(
             df, fc_colname, p_value_colname, p_value_thresh, fc_iqr_thresh=fc_iqr_thresh)
 
-        plt.figure(figsize=(10, 10))
+        plt.figure(figsize=(15, 15))
 
         # create a scatter plot of the FC vs. -log10(p-value), removing FC outliers
         fc_mask_fc = df.loc[fc_mask, fc_colname]
@@ -222,6 +234,11 @@ class AnalysisPipeline(object):
         combined_mask_p = -1 * np.log10(df.loc[combined_mask, p_value_colname])
         plt.scatter(combined_mask_fc, combined_mask_p, color='red', alpha=0.5)
 
+        if top_n is not None:
+            selected = top_n
+            self._label_volcano(True, combined_mask_fc, combined_mask_p, df, selected)
+            self._label_volcano(False, combined_mask_fc, combined_mask_p, df, selected)
+
         # add labels and title to the plot
         plt.xlabel('Fold Change (log2)')
         plt.ylabel('-log10(P-value)')
@@ -232,6 +249,28 @@ class AnalysisPipeline(object):
 
         # display the plot
         plt.show()
+
+    def _label_volcano(self, ascending, combined_mask_fc, combined_mask_p, df, top_n):
+
+        # Sort the combined_mask_fc and combined_mask_p series by -log10(P-value)
+        sorted_indices = combined_mask_fc.sort_values(ascending=ascending).head(
+            top_n).index
+
+        # Get the positions of the top-N indices in the original DataFrame
+        top_n_positions = [df.index.get_loc(idx) for idx in sorted_indices]
+
+        # Create an empty list for storing text objects
+        texts = []
+
+        # Add labels to the top-N entries
+        for position, idx in zip(top_n_positions, sorted_indices):
+            label = df.index[position]
+            x = combined_mask_fc.loc[idx]
+            y = combined_mask_p.loc[idx]
+            texts.append(plt.text(x, y, label, fontsize=18))
+
+        # Adjust the labels to avoid overlapping
+        adjust_text(texts, arrowprops=dict(arrowstyle='->', color='black', lw=1.0))
 
     def filter_de_df(self, df, fc_colname, p_value_colname, p_value_thresh,
                      fc_iqr_thresh=1.5):

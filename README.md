@@ -13,6 +13,10 @@ Simply run:
 pip install pyMultiOmics
 ```
 
+For PDF report generation using nbconvert, make sure to install the required dependencies:
+
+https://nbconvert.readthedocs.io/en/latest/install.html
+
 ### Usage
 
 [Notebooks to demonstrate various functionalities can be found here](https://github.com/glasgowcompbio/pyMultiOmics/blob/main/notebooks).
