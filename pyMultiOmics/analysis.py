@@ -141,7 +141,7 @@ class AnalysisPipeline(object):
         return pc1_values, pc2_values
 
     def heatmap(self, data_type, N=None, normalise=None, log=False, return_fig=False,
-                kind='samples', selected_cluster=None, cluster_labels=None):
+                kind='samples', selected_cluster=None, cluster_labels=None, show_ticks=True):
         assert kind in ['samples', 'features']
 
         data_df, design_df = self.multi_omics_data.get_dfs(data_type)
@@ -166,7 +166,11 @@ class AnalysisPipeline(object):
             sns.set_context('poster')
             fig = plt.figure(figsize=(10, 10))
             sns.heatmap(df)
-            print(df.shape)
+            plt.xlabel('Analytes')
+            plt.ylabel('Samples')
+            if not show_ticks:
+                plt.xticks([])
+                plt.yticks([])
 
         return df
 
@@ -195,7 +199,7 @@ class AnalysisPipeline(object):
             silhouette_df = pd.DataFrame({'Score': silhouette_scores})
             fig = plt.figure(figsize=(10, 5))
             sns.lineplot(data=silhouette_df)
-            plt.title('n_clusters = %d' % best_n_clusters)
+            plt.title('Best number of clusters = %d' % best_n_clusters)
 
         # final clustering using best_n_clusters
         n_clusters = best_n_clusters if n_clusters is None else n_clusters
