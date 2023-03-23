@@ -140,6 +140,48 @@ class AnalysisPipeline(object):
 
         return pc1_values, pc2_values
 
+    def scatter_PCA(self, data_type, normalise=None, log=False, n_components=10, hue=None,
+                    style=None,
+                    palette='bright', return_fig=False, kind='samples'):
+        assert kind in ['samples', 'features']
+
+        data_df, design_df = self.multi_omics_data.get_dfs(data_type)
+        min_replace = SMALL
+        wi = Inference(data_df, design_df, data_type, min_value=min_replace)
+        df = wi.normalise(kind, log, normalise)
+
+        pca = PCA(n_components=n_components)
+        pcs = pca.fit_transform(df)
+        print('PCA explained variance', pca.explained_variance_ratio_.cumsum())
+
+        if return_fig:
+            sns.set_context('poster')
+            palette = None if hue is None else palette
+
+            # Set the number of rows and columns for the subplots
+            n_rows = n_components - 1
+            n_cols = n_components - 1
+            fig, axes = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 4 * n_rows))
+
+            for i in range(n_rows):
+                for j in range(i + 1, n_cols + 1):
+                    ax = axes[i, j - 1]
+                    g = sns.scatterplot(x=pcs[:, i], y=pcs[:, j], hue=hue, style=style,
+                                        palette=palette, ax=ax, s=20)
+                    ax.set_xlabel(f'PC{i + 1}')
+                    ax.set_ylabel(f'PC{j + 1}')
+
+                    # Move the legend outside the plot for the last subplot in the row
+                    if j == n_cols:
+                        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5), ncol=1, fontsize=12)
+                    else:
+                        ax.legend().set_visible(False)
+
+            plt.tight_layout()
+            plt.show()
+
+        return pcs
+
     def heatmap(self, data_type, N=None, normalise=None, log=False, return_fig=False,
                 kind='samples', selected_cluster=None, cluster_labels=None, show_ticks=True):
         assert kind in ['samples', 'features']
@@ -155,7 +197,6 @@ class AnalysisPipeline(object):
 
         # select a cluster to display in the heatmap
         if selected_cluster is not None and cluster_labels is not None:
-
             # select indices of cluster_labels that are the same as selected_cluster
             selected_indices = np.where(cluster_labels == selected_cluster)[0]
 
@@ -165,7 +206,7 @@ class AnalysisPipeline(object):
         if return_fig:
             sns.set_context('poster')
             fig = plt.figure(figsize=(10, 10))
-            sns.heatmap(df)
+            sns.heatmap(df, cmap='coolwarm')
             plt.xlabel('Analytes')
             plt.ylabel('Samples')
             if not show_ticks:
@@ -210,7 +251,8 @@ class AnalysisPipeline(object):
 
         return labels, centroids, silhouette_scores
 
-    def volcano(self, df, p_value_colname, p_value_thresh, fc_colname, fc_iqr_thresh=1.5, top_n=None):
+    def volcano(self, df, p_value_colname, p_value_thresh, fc_colname, fc_iqr_thresh=1.5,
+                top_n=None):
         """
         This function generates a volcano plot of the given DataFrame using matplotlib.
 

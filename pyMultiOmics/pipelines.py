@@ -1,12 +1,8 @@
 import numpy as np
 import pandas as pd
-import pylab as plt
-import seaborn as sns
 from loguru import logger
 from scipy import stats
 from sklearn import preprocessing
-from sklearn.cluster import KMeans
-from sklearn.decomposition import PCA
 from sklearn.preprocessing import MinMaxScaler
 from statsmodels.sandbox.stats.multicomp import multipletests
 
@@ -70,13 +66,16 @@ class Inference(object):
         return df
 
     def _normalise_df(self, data_df, log=False, method='standard'):
-        if data_df.empty or method is None:
+        if data_df.empty:
+            return data_df
+
+        if log:
+            data_df = np.log(data_df)
+
+        if method is None:
             return data_df
 
         data_arr = data_df.values
-        if log:
-            data_arr = np.log(data_arr)
-
         assert method in ['standard', 'minmax']
         if method == 'standard':
             # center data to have 0 mean and unit variance for heatmap and pca
