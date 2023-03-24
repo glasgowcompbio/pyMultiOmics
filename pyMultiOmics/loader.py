@@ -123,7 +123,8 @@ def filter_affinity_data_by_batch(df, feature_metadata_df, sample_metadata_df, f
 def batch_correction(df, sample_metadata_df):
     warnings.filterwarnings("ignore", category=RuntimeWarning)
     batch = sample_metadata_df['Plate number']
-    df_logged = pycombat(np.log(df), batch)
+    mod = sample_metadata_df['group'].values
+    df_logged = pycombat(np.log(df), batch, mod=mod)
     df = np.exp(df_logged)
     return df
 
