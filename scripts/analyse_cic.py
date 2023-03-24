@@ -18,10 +18,24 @@ def load_config_file(config_file):
 
 
 def main(args):
-    input_excel = os.path.abspath(args.input_excel)
-    output_dir = os.path.abspath(args.output_dir)
 
+    # input excel
+    input_excel = os.path.abspath(args.input_excel)
     print('Input Excel:', input_excel)
+
+    # config file
+    config_file = os.path.abspath(args.config_file)
+    print('Config file:', config_file)
+    processing_params = load_config_file(config_file)
+
+    print('Pre-processing parameters:')
+    print(yaml.dump(processing_params, indent=4))
+    params = {}
+    params['file_name'] = input_excel
+    params.update(processing_params)
+
+    # output dir
+    output_dir = os.path.abspath(args.output_dir)
     print('Output Directory:', output_dir)
 
     # Check if template file exists in parent directory
@@ -46,16 +60,6 @@ def main(args):
 
     print('Output Notebook:', output_notebook)
     print('Output PDF:', output_pdf)
-
-    config_file = os.path.abspath(args.config_file)
-    processing_params = load_config_file(config_file)
-
-    print('Pre-processing parameters:')
-    print(yaml.dump(processing_params, indent=4))
-
-    params = {}
-    params['file_name'] = input_excel
-    params.update(processing_params)
 
     create_if_not_exist(output_dir)
     _ = pm.execute_notebook(template_file, output_notebook, report_mode=True, parameters=params)
