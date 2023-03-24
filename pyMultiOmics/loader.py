@@ -1,9 +1,12 @@
+import warnings
+
+import numpy as np
 import pandas as pd
+from combat.pycombat import pycombat
 
-from pyMultiOmics.constants import SMALL
 
-
-def process_affinity_data(file_name, filter='batch', filter_thresh=0.50):
+def process_affinity_data(file_name, filter_method='batch', filter_thresh=0.50,
+                          correct_batch=False):
     """
     Process CIC Affinity data
     Args:
@@ -17,20 +20,24 @@ def process_affinity_data(file_name, filter='batch', filter_thresh=0.50):
     df, feature_metadata_df, sample_metadata_df = load_affinity_data(file_name)
 
     # feature filtering
-    assert filter in ['count', 'batch']
-    if filter == 'count':
-        filtered_df, filtered_feature_metadata_df = filter_affinity_data_by_count(
+    assert filter_method in ['count', 'batch']
+    if filter_method == 'count':
+        df, feature_metadata_df = filter_affinity_data_by_count(
             df, feature_metadata_df, filter_thresh)
-    elif filter == 'batch':
-        filtered_df, filtered_feature_metadata_df = filter_affinity_data_by_batch(
+    elif filter_method == 'batch':
+        df, feature_metadata_df = filter_affinity_data_by_batch(
             df, feature_metadata_df, sample_metadata_df, filter_thresh)
     else:
         print('Unknown filtering method')  # shouldn't happen
 
     # missing value imputation
-    filtered_df = imput_affinity_data(filtered_df)
+    df = imput_affinity_data(df)
 
-    return filtered_df, sample_metadata_df, filtered_feature_metadata_df
+    # batch correction
+    if correct_batch:
+        df = batch_correction(df, sample_metadata_df)
+
+    return df, sample_metadata_df, feature_metadata_df
 
 
 def load_affinity_data(file_name):
@@ -105,7 +112,7 @@ def filter_affinity_data_by_batch(df, feature_metadata_df, sample_metadata_df, f
         features_to_keep = features_to_keep - features_to_remove
 
     # Filter the original 'df' DataFrame using the features_to_keep set
-    filtered_df = df.loc[features_to_keep]
+    filtered_df = df.loc[list(features_to_keep)]
 
     # filter the feature metadata too
     filtered_feature_metadata_df = pd.merge(feature_metadata_df, filtered_df, how='inner',
@@ -113,6 +120,13 @@ def filter_affinity_data_by_batch(df, feature_metadata_df, sample_metadata_df, f
     return filtered_df, filtered_feature_metadata_df
 
 
+def batch_correction(df, sample_metadata_df):
+    warnings.filterwarnings("ignore", category=RuntimeWarning)
+    batch = sample_metadata_df['Plate number']
+    df_logged = pycombat(np.log(df), batch)
+    df = np.exp(df_logged)
+    return df
+
+
 def imput_affinity_data(filtered_df):
-    # Replace NaN values with a small value
-    return filtered_df.fillna(SMALL)
+    return filtered_df.apply(lambda row: row.fillna(row.min()), axis=1)

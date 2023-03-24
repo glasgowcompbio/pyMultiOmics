@@ -183,7 +183,8 @@ class AnalysisPipeline(object):
         return pcs
 
     def heatmap(self, data_type, N=None, normalise=None, log=False, return_fig=False,
-                kind='samples', selected_cluster=None, cluster_labels=None, show_ticks=True):
+                kind='samples', show_ticks=True, selected_cluster=None, cluster_labels=None,
+                cluster_order=None):
         assert kind in ['samples', 'features']
 
         data_df, design_df = self.multi_omics_data.get_dfs(data_type)
@@ -194,6 +195,10 @@ class AnalysisPipeline(object):
         # select the first N rows for heatmap
         if N is not None:
             df = df[0:N]
+
+        # reorder rows according to the provided cluster ordering
+        if cluster_order is not None:
+            df = df.iloc[cluster_order, :]
 
         # select a cluster to display in the heatmap
         if selected_cluster is not None and cluster_labels is not None:
@@ -207,8 +212,12 @@ class AnalysisPipeline(object):
             sns.set_context('poster')
             fig = plt.figure(figsize=(10, 10))
             sns.heatmap(df, cmap='coolwarm')
-            plt.xlabel('Analytes')
-            plt.ylabel('Samples')
+            if kind == 'samples':
+                plt.xlabel('Analytes')
+                plt.ylabel('Samples')
+            else:
+                plt.xlabel('Samples')
+                plt.ylabel('Analytes')
             if not show_ticks:
                 plt.xticks([])
                 plt.yticks([])
@@ -216,7 +225,7 @@ class AnalysisPipeline(object):
         return df
 
     def cluster(self, data_type, normalise=None, log=False, kind='samples', return_fig=False,
-                n_clusters=None):
+                n_clusters=None, k=None):
         assert kind in ['samples', 'features']
 
         data_df, design_df = self.multi_omics_data.get_dfs(data_type)
@@ -224,23 +233,28 @@ class AnalysisPipeline(object):
         wi = Inference(data_df, design_df, data_type, min_value=min_replace)
         df = wi.normalise(kind, log, normalise)
 
-        # use elbow method to choose n_clusters
+        # use our own k
         silhouette_scores = []
-        if n_clusters is None:
-            for n_clusters_to_test in range(2, 11):
-                kmeans = KMeans(n_clusters=n_clusters_to_test)
-                labels = kmeans.fit_predict(df)
-                silhouette_avg = silhouette_score(df, labels)
-                silhouette_scores.append(silhouette_avg)
-            best_n_clusters = np.argmax(
-                silhouette_scores) + 2  # add 2 because we started at 2 clusters
+        if k is not None:
+            n_clusters = k
+        else:
 
-        # plot the scores
-        if return_fig and n_clusters is None:
-            silhouette_df = pd.DataFrame({'Score': silhouette_scores})
-            fig = plt.figure(figsize=(10, 5))
-            sns.lineplot(data=silhouette_df)
-            plt.title('Best number of clusters = %d' % best_n_clusters)
+            # use elbow method to choose n_clusters
+            if n_clusters is None:
+                for n_clusters_to_test in range(2, 11):
+                    kmeans = KMeans(n_clusters=n_clusters_to_test)
+                    labels = kmeans.fit_predict(df)
+                    silhouette_avg = silhouette_score(df, labels)
+                    silhouette_scores.append(silhouette_avg)
+                best_n_clusters = np.argmax(
+                    silhouette_scores) + 2  # add 2 because we started at 2 clusters
+
+            # plot the scores
+            if return_fig and n_clusters is None:
+                silhouette_df = pd.DataFrame({'Score': silhouette_scores})
+                fig = plt.figure(figsize=(10, 5))
+                sns.lineplot(data=silhouette_df)
+                plt.title('Best number of clusters = %d' % best_n_clusters)
 
         # final clustering using best_n_clusters
         n_clusters = best_n_clusters if n_clusters is None else n_clusters
@@ -248,8 +262,10 @@ class AnalysisPipeline(object):
         kmeans.fit(df)
         labels = kmeans.labels_
         centroids = kmeans.cluster_centers_
+        order = np.argsort(labels)
+        silhouette_scores = np.array(silhouette_scores)
 
-        return labels, centroids, silhouette_scores
+        return labels, order, centroids, silhouette_scores
 
     def volcano(self, df, p_value_colname, p_value_thresh, fc_colname, fc_iqr_thresh=1.5,
                 top_n=None):
