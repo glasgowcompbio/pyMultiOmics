@@ -1,12 +1,15 @@
+import matplotlib.cm as cm
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import pylab as plt
 import seaborn as sns
 from adjustText import adjust_text
+from kneed import KneeLocator
 from loguru import logger
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
-from sklearn.metrics import silhouette_score
+from sklearn.metrics import silhouette_samples, silhouette_score
 
 from .constants import PROTEINS, COMPOUNDS, REACTIONS, PATHWAYS, SMALL, GENES, \
     INFERENCE_T_TEST, INFERENCE_DESEQ, INFERENCE_LIMMA, CIC_COMPOUNDS
@@ -92,8 +95,6 @@ class AnalysisPipeline(object):
         res = res.add_suffix(suffix)
         return res.sort_index()
 
-    import pandas as pd
-
     def de_sort_and_filter(self, df, p_value_colname, p_value_thresh, fc_colname,
                            fc_sort_order='asc', top_n=None, fc_iqr_thresh=1.5):
 
@@ -128,7 +129,7 @@ class AnalysisPipeline(object):
         pcs = pca.fit_transform(df)
         pc1_values = pcs[:, 0]
         pc2_values = pcs[:, 1]
-        print('PCA explained variance', pca.explained_variance_ratio_.cumsum())
+        # print('PCA explained variance', pca.explained_variance_ratio_.cumsum())
 
         if return_fig:
             sns.set_context('poster')
@@ -138,7 +139,7 @@ class AnalysisPipeline(object):
             if hue is not None:
                 g.legend(loc='center left', bbox_to_anchor=(1, 0.5), ncol=1, fontsize=12)
 
-        return pc1_values, pc2_values
+        return pcs
 
     def scatter_PCA(self, data_type, normalise=None, log=False, n_components=10, hue=None,
                     style=None,
@@ -211,7 +212,7 @@ class AnalysisPipeline(object):
         if return_fig:
             sns.set_context('poster')
             fig = plt.figure(figsize=(10, 10))
-            sns.heatmap(df, cmap='coolwarm')
+            sns.heatmap(df, cmap='seismic')
             if kind == 'samples':
                 plt.xlabel('Analytes')
                 plt.ylabel('Samples')
@@ -225,47 +226,187 @@ class AnalysisPipeline(object):
         return df
 
     def cluster(self, data_type, normalise=None, log=False, kind='samples', return_fig=False,
-                n_clusters=None, k=None):
+                k=None, pcs=None):
         assert kind in ['samples', 'features']
 
-        data_df, design_df = self.multi_omics_data.get_dfs(data_type)
-        min_replace = SMALL
-        wi = Inference(data_df, design_df, data_type, min_value=min_replace)
-        df = wi.normalise(kind, log, normalise)
+        if pcs is None:
+            data_df, design_df = self.multi_omics_data.get_dfs(data_type)
+            min_replace = SMALL
+            wi = Inference(data_df, design_df, data_type, min_value=min_replace)
+            df = wi.normalise(kind, log, normalise)
+            data = df.values
+        else:
+            data = pcs
 
         # use our own k
         silhouette_scores = []
         if k is not None:
             n_clusters = k
-        else:
-
-            # use elbow method to choose n_clusters
-            if n_clusters is None:
-                for n_clusters_to_test in range(2, 11):
-                    kmeans = KMeans(n_clusters=n_clusters_to_test)
-                    labels = kmeans.fit_predict(df)
-                    silhouette_avg = silhouette_score(df, labels)
-                    silhouette_scores.append(silhouette_avg)
-                best_n_clusters = np.argmax(
-                    silhouette_scores) + 2  # add 2 because we started at 2 clusters
-
-            # plot the scores
-            if return_fig and n_clusters is None:
-                silhouette_df = pd.DataFrame({'Score': silhouette_scores})
-                fig = plt.figure(figsize=(10, 5))
-                sns.lineplot(data=silhouette_df)
-                plt.title('Best number of clusters = %d' % best_n_clusters)
+        else:  # use elbow method to choose n_clusters
+            n_clusters, silhouette_scores = self.choose_n_cluster(data, pcs, return_fig)
 
         # final clustering using best_n_clusters
-        n_clusters = best_n_clusters if n_clusters is None else n_clusters
-        kmeans = KMeans(n_clusters=n_clusters)
-        kmeans.fit(df)
+        kmeans = KMeans(n_clusters=n_clusters, random_state=0)
+        kmeans.fit(data)
         labels = kmeans.labels_
         centroids = kmeans.cluster_centers_
         order = np.argsort(labels)
         silhouette_scores = np.array(silhouette_scores)
 
         return labels, order, centroids, silhouette_scores
+
+    def choose_n_cluster(self, data, pcs, return_fig):
+
+        possible_clusters = range(2, 11)
+        silhouette_scores = self.compute_silhouette_scores(data, possible_clusters)
+        n_clusters = self.detect_elbow(possible_clusters, silhouette_scores)
+
+        # plot the scores and silhouette analysis
+        if return_fig:
+            # Plot silhouette scores line plot
+            self.silhouette_lineplot(n_clusters, possible_clusters, silhouette_scores)
+
+            # Plot silhouette analysis for each n_clusters_to_test
+            self.silhouette_analysis(data, n_clusters, pcs, silhouette_scores)
+        return n_clusters, silhouette_scores
+
+    def compute_silhouette_scores(self, data, possible_clusters):
+        silhouette_scores = []
+        for n_clusters_to_test in possible_clusters:
+            kmeans = KMeans(n_clusters=n_clusters_to_test, random_state=0)
+            labels = kmeans.fit_predict(data)
+            silhouette_avg = silhouette_score(data, labels)
+            silhouette_scores.append(silhouette_avg)
+        # print(silhouette_scores)
+        return silhouette_scores
+
+    def detect_elbow(self, possible_clusters, silhouette_scores):
+
+        # Create KneeLocator instances for all combinations of curve shapes and directions
+        combinations = [
+            ('convex', 'decreasing'),
+            ('concave', 'increasing'),
+            ('convex', 'increasing'),
+            ('concave', 'decreasing')
+        ]
+        elbow_candidates = []
+        for curve, direction in combinations:
+            knee_locator = KneeLocator(x=possible_clusters, y=silhouette_scores,
+                                       curve=curve, direction=direction)
+            elbow = knee_locator.knee
+            if elbow is not None:
+                elbow_candidates.append(
+                    (elbow, silhouette_scores[possible_clusters.index(elbow)]))
+
+        # Choose the elbow point with the highest silhouette score
+        if elbow_candidates:
+            # print(elbow_candidates)
+            sorted_elbow_candidates = sorted(elbow_candidates, key=lambda x: x[1], reverse=True)
+            top_two = sorted_elbow_candidates[:2]
+
+            # Prioritize ('convex', 'decreasing') if it's in the top 2
+            convex_decreasing_elbow = [elbow for elbow, _ in elbow_candidates if
+                                       KneeLocator(x=possible_clusters, y=silhouette_scores,
+                                                   curve='convex',
+                                                   direction='decreasing').knee == elbow]
+            if convex_decreasing_elbow and convex_decreasing_elbow[0] in [elbow for elbow, _ in
+                                                                          top_two]:
+                n_clusters = convex_decreasing_elbow[0]
+            else:
+                n_clusters, _ = top_two[0]
+        else:
+            # Fallback/default value for n_clusters in case no elbow point is detected
+            n_clusters = 3
+        return n_clusters
+
+    def silhouette_lineplot(self, n_clusters, possible_clusters, silhouette_scores):
+        silhouette_df = pd.DataFrame({'Score': silhouette_scores})
+        fig = plt.figure(figsize=(10, 5))
+        ax = sns.lineplot(data=silhouette_df)
+        plt.title('Best number of clusters = %d' % n_clusters)
+        ax.set_xticks(np.arange(len(possible_clusters)))
+        ax.set_xticklabels(possible_clusters)
+        plt.show()
+
+    def silhouette_analysis(self, data, n_clusters, pcs, silhouette_scores):
+        if n_clusters <= 2:
+            to_plot = [n_clusters, n_clusters + 1, n_clusters + 2]
+        else:
+            to_plot = [n_clusters - 1, n_clusters, n_clusters + 1]
+        for n_clusters_to_test in to_plot:
+            # Create a subplot with 1 row and 2 columns
+            fig, (ax1, ax2) = plt.subplots(1, 2)
+            fig.set_size_inches(18, 7)
+
+            # The 1st subplot is the silhouette plot
+            ax1.set_xlim([-0.1, 1])
+            ax1.set_ylim([0, len(data) + (n_clusters_to_test + 1) * 10])
+
+            clusterer = KMeans(n_clusters=n_clusters_to_test, random_state=0)
+            cluster_labels = clusterer.fit_predict(data)
+
+            silhouette_avg = silhouette_scores[n_clusters_to_test - 2]
+
+            # Compute the silhouette scores for each sample
+            sample_silhouette_values = silhouette_samples(data, cluster_labels)
+
+            y_lower = 10
+            for i in range(n_clusters_to_test):
+                ith_cluster_silhouette_values = sample_silhouette_values[cluster_labels == i]
+                ith_cluster_silhouette_values.sort()
+
+                size_cluster_i = ith_cluster_silhouette_values.shape[0]
+                y_upper = y_lower + size_cluster_i
+
+                color = cm.nipy_spectral(float(i) / n_clusters_to_test)
+                ax1.fill_betweenx(np.arange(y_lower, y_upper), 0,
+                                  ith_cluster_silhouette_values,
+                                  facecolor=color, edgecolor=color, alpha=0.7)
+
+                ax1.text(-0.05, y_lower + 0.5 * size_cluster_i, str(i))
+                y_lower = y_upper + 10
+
+            ax1.set_title("The silhouette plot for the various clusters.")
+            ax1.set_xlabel("The silhouette coefficient values")
+            ax1.set_ylabel("Cluster label")
+
+            ax1.axvline(x=silhouette_avg, color="red", linestyle="--")
+
+            ax1.set_yticks([])  # Clear the yaxis labels / ticks
+            ax1.set_xticks([-0.1, 0, 0.2, 0.4, 0.6, 0.8, 1])
+
+            # 2nd Plot showing the actual clusters formed
+            colors = cm.nipy_spectral(cluster_labels.astype(float) / n_clusters_to_test)
+            first_feature = data[:, 0]
+            second_feature = data[:, 1]
+            ax2.scatter(first_feature, second_feature, marker=".", s=100, lw=0, alpha=0.7,
+                        c=colors, edgecolor="k")
+
+            # Labeling the clusters
+            centers = clusterer.cluster_centers_
+            # Draw white circles at cluster centers
+            ax2.scatter(centers[:, 0], centers[:, 1], marker="o", c="white", alpha=1, s=200,
+                        edgecolor="k")
+
+            for i, c in enumerate(centers):
+                ax2.scatter(c[0], c[1], marker="$%d$" % i, alpha=1, s=50, edgecolor="k")
+
+            ax2.set_title("The visualization of the clustered data.")
+            if pcs is None:
+                ax2.set_xlabel("Feature space for the 1st feature")
+                ax2.set_ylabel("Feature space for the 2nd feature")
+            else:
+                ax2.set_xlabel("PC1")
+                ax2.set_ylabel("PC2")
+
+            plt.suptitle(
+                "Silhouette analysis for KMeans clustering on sample data with n_clusters = %d"
+                % n_clusters_to_test,
+                fontsize=14,
+                fontweight="bold",
+            )
+
+            plt.show()
 
     def volcano(self, df, p_value_colname, p_value_thresh, fc_colname, fc_iqr_thresh=1.5,
                 top_n=None):

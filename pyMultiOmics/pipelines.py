@@ -76,21 +76,24 @@ class Inference(object):
             return data_df
 
         data_arr = data_df.values
-        assert method in ['standard', 'minmax']
-        if method == 'standard':
-            # center data to have 0 mean and unit variance for heatmap and pca
-            # data_arr is features X samples, so axis=1 is to normalise along the features
-            scaled_data = preprocessing.scale(data_arr, axis=1)
+        if method is not None:
+            # print(method)
+            assert method in ['standard', 'minmax']
+            scaled_data = data_arr
+            if method == 'standard':
+                # center data to have 0 mean and unit variance for heatmap and pca
+                # data_arr is features X samples, so axis=1 is to normalise along the features
+                scaled_data = preprocessing.scale(data_arr, axis=1)
 
-        elif method == 'minmax':
-            # normalise features to be within 0 to 1
-            scaler = MinMaxScaler()
-            scaled_data = scaler.fit_transform(data_arr.transpose())
-            scaled_data = scaled_data.transpose()
+            elif method == 'minmax':
+                # normalise features to be within 0 to 1
+                scaler = MinMaxScaler()
+                scaled_data = scaler.fit_transform(data_arr.transpose())
+                scaled_data = scaled_data.transpose()
 
-        # set the values back to the dataframe
-        sample_names = data_df.columns
-        data_df[sample_names] = scaled_data
+            # set the values back to the dataframe
+            sample_names = data_df.columns
+            data_df[sample_names] = scaled_data
         return data_df
 
     def run_deseq(self, keep_threshold, case, control):
