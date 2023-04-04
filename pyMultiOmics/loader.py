@@ -4,9 +4,12 @@ import numpy as np
 import pandas as pd
 from combat.pycombat import pycombat
 
+from pyMultiOmics.base import SingleOmicsData, MultiOmicsData
+from pyMultiOmics.constants import COMPOUNDS, CIC_COMPOUNDS
+
 
 def process_affinity_data(file_name, filter_method='batch', filter_thresh=0.50,
-                          correct_batch=False):
+                          correct_batch=False, annot_csv=None):
     """
     Process CIC Affinity data
     Args:
@@ -36,6 +39,13 @@ def process_affinity_data(file_name, filter_method='batch', filter_thresh=0.50,
     # batch correction
     if correct_batch:
         df = batch_correction(df, sample_metadata_df)
+
+    # load additional feature annotation if available
+    if annot_csv is not None:
+        annot_df = pd.read_csv(annot_csv, index_col='Identifier')
+        annot_df = annot_df.astype(str)
+        feature_metadata_df = pd.merge(feature_metadata_df, annot_df, how='left',
+                                       left_index=True, right_index=True)
 
     return df, sample_metadata_df, feature_metadata_df
 
@@ -82,8 +92,7 @@ def filter_affinity_data_by_count(df, feature_metadata_df, filter_thresh):
     filtered_df = df.dropna(thresh=df.shape[1] - thresh_count)
 
     # filter the feature metadata too
-    filtered_feature_metadata_df = pd.merge(feature_metadata_df, filtered_df, how='inner',
-                                            left_index=True, right_index=True)
+    filtered_feature_metadata_df = feature_metadata_df.loc[filtered_df.index]
     return filtered_df, filtered_feature_metadata_df
 
 
@@ -115,8 +124,7 @@ def filter_affinity_data_by_batch(df, feature_metadata_df, sample_metadata_df, f
     filtered_df = df.loc[list(features_to_keep)]
 
     # filter the feature metadata too
-    filtered_feature_metadata_df = pd.merge(feature_metadata_df, filtered_df, how='inner',
-                                            left_index=True, right_index=True)
+    filtered_feature_metadata_df = feature_metadata_df.loc[filtered_df.index]
     return filtered_df, filtered_feature_metadata_df
 
 
@@ -131,3 +139,20 @@ def batch_correction(df, sample_metadata_df):
 
 def imput_affinity_data(filtered_df):
     return filtered_df.apply(lambda row: row.fillna(row.min()), axis=1)
+
+
+def get_mappable_affinity_data(mo, annot_column):
+    cic_data = mo.views[CIC_COMPOUNDS]
+
+    feature_annot_df = cic_data.original_feature_annot_df
+    feature_annot_df = feature_annot_df[feature_annot_df[annot_column].isna() == False]
+
+    measurement_df = cic_data.original_measurement_df.loc[feature_annot_df.index]
+    measurement_df.index = feature_annot_df[annot_column]
+    design_df = cic_data.original_design_df
+
+    compound_data = SingleOmicsData(COMPOUNDS, measurement_df, design_df,
+                                    feature_annot_df=feature_annot_df)
+    mo_new = MultiOmicsData()
+    mo_new.add_data([compound_data])
+    return mo_new

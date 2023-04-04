@@ -11,6 +11,11 @@ class SingleOmicsData():
     def __init__(self, data_type, measurement_df, design_df, feature_annot_df=None, significant_df=None):
         self.data_type = data_type
 
+        self.original_measurement_df = measurement_df.copy()
+        self.original_design_df = design_df.copy()
+        self.original_feature_annot_df = feature_annot_df
+        self.original_significant_df = significant_df
+
         # extract columns containing p-values and fold changes into its own dataframe
         if significant_df is not None:
             self.significant_df = significant_df
