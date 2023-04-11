@@ -79,9 +79,9 @@ def ensembl_to_uniprot(ensembl_ids, species_list):
             (rg:ReferenceGeneProduct)-[:referenceGene]->
             (rs:ReferenceSequence)-[:species]->(s:Species)
         WHERE
-            rs.identifier IN {ensembl_ids} AND
+            rs.identifier IN $ensembl_ids AND
             rs.databaseName = 'ENSEMBL' AND            
-            s.displayName IN {species}
+            s.displayName IN $species
         RETURN DISTINCT
             rs.identifier AS gene_id,
             rs.databaseName AS gene_db,
@@ -121,9 +121,9 @@ def uniprot_to_ensembl(uniprot_ids, species_list):
             (rg:ReferenceGeneProduct)-[:referenceGene]->
             (rs:ReferenceSequence)-[:species]->(s:Species)
         WHERE
-            rg.identifier IN {uniprot_ids} AND
+            rg.identifier IN $uniprot_ids AND
             rs.databaseName = 'ENSEMBL' AND
-            s.displayName IN {species}
+            s.displayName IN $species
         RETURN DISTINCT
             rs.identifier AS gene_id,
             rs.databaseName AS gene_db,
@@ -164,9 +164,9 @@ def uniprot_to_reaction(uniprot_ids, species_list):
               (re:ReferenceEntity)-[:referenceDatabase]->
               (rd:ReferenceDatabase)
         WHERE
-            re.identifier IN {uniprot_ids} AND
+            re.identifier IN $uniprot_ids AND
             rd.displayName = 'UniProt' AND
-            rle.speciesName IN {species}
+            rle.speciesName IN $species
         RETURN DISTINCT
             re.identifier AS protein_id,
             re.description AS description,
@@ -233,8 +233,8 @@ def compound_to_reaction(compound_ids, species_list):
               (pe:PhysicalEntity)-[:crossReference|:referenceEntity]->
               (do:DatabaseObject)
         WHERE
-            do.identifier IN {compound_ids} AND
-            rle.speciesName IN {species}
+            do.identifier IN $compound_ids AND
+            rle.speciesName IN $species
         RETURN DISTINCT
             do.identifier AS compound_id,
             do.displayName as display_name,
@@ -289,7 +289,7 @@ def get_reaction_entities(reaction_ids):
               |physicalEntity|regulatedBy|regulator|hasComponent|hasMember
               |hasCandidate*]->(dbo:DatabaseObject)
         WHERE
-            rle.stId IN {reaction_ids}
+            rle.stId IN $reaction_ids
         RETURN
             rle.stId AS reaction_id,
             dbo.stId AS entity_id,
@@ -332,9 +332,9 @@ def reaction_to_uniprot(reaction_ids, species_list):
               (re:ReferenceEntity)-[:referenceDatabase]->
               (rd:ReferenceDatabase)
         WHERE
-            rle.stId IN {reaction_ids} AND
+            rle.stId IN $reaction_ids AND
             rd.displayName = 'UniProt' AND
-            rle.speciesName IN {species}
+            rle.speciesName IN $species
         RETURN DISTINCT
             re.identifier AS protein_id,
             re.description AS description,
@@ -370,9 +370,9 @@ def reaction_to_compound(reaction_ids, species_list, use_kegg=False):
               (pe:PhysicalEntity)-[:crossReference|:referenceEntity]->
               (do:DatabaseObject)
         WHERE
-            rle.stId IN {reaction_ids} AND        
+            rle.stId IN $reaction_ids AND        
             (do.databaseName = 'COMPOUND' OR do.databaseName = 'ChEBI') AND
-            rle.speciesName IN {species}
+            rle.speciesName IN $species
         RETURN DISTINCT
             do.identifier as compound_id,
             do.displayName as display_name,            
@@ -425,8 +425,8 @@ def reaction_to_pathway(reaction_ids, species_list, metabolic_pathway_only, leaf
         MATCH (tp:TopLevelPathway)-[:hasEvent*]->
               (p:Pathway)-[:hasEvent*]->(rle:ReactionLikeEvent)
         WHERE
-            tp.speciesName IN {species} AND        
-            rle.stId IN {reaction_ids} AND            
+            tp.speciesName IN $species AND        
+            rle.stId IN $reaction_ids AND            
         """
 
         if leaf:  # retrieve only the leaf nodes in the pathway hierarchy
@@ -489,7 +489,7 @@ def pathway_to_reactions(pathway_ids):
         query = """
         MATCH (p:Pathway)-[:hasEvent*]->(rle:ReactionLikeEvent)
         WHERE
-            p.stId IN {pathway_ids} AND
+            p.stId IN $pathway_ids AND
             (p)-[:hasEvent]->(rle)
         RETURN
             rle.stId AS reaction_id,
@@ -524,7 +524,7 @@ def get_reactome_description(reactome_id, from_parent=False):
             query = """
             MATCH (dbo1:DatabaseObject)<-[:inferredTo*]-(dbo2:DatabaseObject)-[:summation|:literatureReference]-(ss)
                     WHERE
-                        dbo1.stId = {reactome_id} AND
+                        dbo1.stId = $reactome_id AND
                         dbo2.isInferred = False
                     RETURN
                         dbo2.stId as reactome_id,
@@ -539,7 +539,7 @@ def get_reactome_description(reactome_id, from_parent=False):
             query = """
             MATCH (dbo:DatabaseObject)-[:summation|:literatureReference]-(ss)
                     WHERE
-                        dbo.stId = {reactome_id}
+                        dbo.stId = $reactome_id
                     RETURN
                         dbo.stId as reactome_id,
                         dbo.speciesName as species,
@@ -583,7 +583,7 @@ def get_all_pathways(species_list):
             MATCH (tp:TopLevelPathway)-[:hasEvent*]->(p:Pathway)-[:hasEvent*]->(rle:ReactionLikeEvent)
             WHERE
                 tp.displayName = 'Metabolism' AND
-                tp.speciesName IN {species_list} AND
+                tp.speciesName IN $species_list AND
                 (p)-[:hasEvent]->(rle)
             RETURN DISTINCT
                 p.speciesName AS species_name,            
@@ -622,7 +622,7 @@ def get_all_pathways_formulae(species):
               (pe:PhysicalEntity)-[:crossReference]->(di:DatabaseIdentifier)<-[:crossReference]-(rm:ReferenceMolecule)
         WHERE
               tp.displayName = 'Metabolism' AND
-              tp.speciesName = {species} AND
+              tp.speciesName = $species AND
               di.databaseName = 'COMPOUND' AND
               (p)-[:hasEvent]->(rle)
         RETURN DISTINCT
