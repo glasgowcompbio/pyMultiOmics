@@ -42,8 +42,17 @@ def process_affinity_data(file_name, filter_method='batch', filter_thresh=0.50,
 
     # load additional feature annotation if available
     if annot_csv is not None:
+        # assume that a column called 'Identifier' already exists
         annot_df = pd.read_csv(annot_csv, index_col='Identifier')
-        annot_df = annot_df.astype(str)
+
+        # Replace all 'No result' and 'undefined' with NaN
+        annot_df.replace('No result', np.nan, inplace=True)
+        annot_df.replace('undefined', np.nan, inplace=True)
+
+        # Remove 'CHEBI:' prefix from ChEBI column values
+        annot_df['ChEBI'] = annot_df['ChEBI'].apply(
+            lambda x: x.replace('CHEBI:', '') if isinstance(x, str) else x)
+
         feature_metadata_df = pd.merge(feature_metadata_df, annot_df, how='left',
                                        left_index=True, right_index=True)
 
