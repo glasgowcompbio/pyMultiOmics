@@ -1,21 +1,32 @@
 import collections
+import io
 import json
 import re
 import traceback
+import urllib.request
 from collections import defaultdict
 from io import StringIO
+from urllib.parse import quote
 
 import numpy as np
 import pandas as pd
+import requests
+from IPython.display import display, Image
+from PIL import Image as PIL_Image
 from loguru import logger
+from sklearn import preprocessing
 
 from .common import load_obj, save_obj
-from .constants import COMPOUND_DATABASE_CHEBI, EXTERNAL_KEGG_TO_CHEBI, GENE_PK, PROTEIN_PK, REACTION_PK, \
-    COMPOUND_PK, PATHWAY_PK, COMPOUND_DATABASE_KEGG, NA, EXTERNAL_GENE_NAMES, EXTERNAL_COMPOUND_NAMES, GENES, \
-    PROTEINS, COMPOUNDS, REACTIONS, PATHWAYS, GENES_TO_PROTEINS, PROTEINS_TO_REACTIONS, COMPOUNDS_TO_REACTIONS, \
-    REACTIONS_TO_PATHWAYS, IDENTIFIER_COL, PIMP_PEAK_ID_COL, GROUP_COL, DEFAULT_GROUP_NAME, PVALUE_COL_PREFIX, \
+from .constants import COMPOUND_DATABASE_CHEBI, EXTERNAL_KEGG_TO_CHEBI, GENE_PK, PROTEIN_PK, \
+    REACTION_PK, \
+    COMPOUND_PK, PATHWAY_PK, COMPOUND_DATABASE_KEGG, NA, EXTERNAL_GENE_NAMES, \
+    EXTERNAL_COMPOUND_NAMES, GENES, \
+    PROTEINS, COMPOUNDS, REACTIONS, PATHWAYS, GENES_TO_PROTEINS, PROTEINS_TO_REACTIONS, \
+    COMPOUNDS_TO_REACTIONS, \
+    REACTIONS_TO_PATHWAYS, IDENTIFIER_COL, PIMP_PEAK_ID_COL, GROUP_COL, DEFAULT_GROUP_NAME, \
+    PVALUE_COL_PREFIX, \
     CHEBI_BFS_RELATION_DICT, \
-    FC_COL_PREFIX, SAMPLE_COL, DATA_DIR, CHEBI_RELATION_TSV
+    FC_COL_PREFIX, SAMPLE_COL, CHEBI_RELATION_TSV
 from .metadata import get_gene_names, get_compound_metadata, clean_label
 from .reactome import ensembl_to_uniprot, uniprot_to_reaction, compound_to_reaction, \
     reaction_to_pathway, reaction_to_uniprot, reaction_to_compound, uniprot_to_ensembl
@@ -101,9 +112,10 @@ def reactome_mapping(observed_gene_df, observed_protein_df, observed_compound_df
     reaction_ids_from_proteins = protein_2_reactions.values
     reaction_ids_from_compounds = compound_2_reactions.values
     reaction_ids = list(set(reaction_ids_from_proteins + reaction_ids_from_compounds))
-    reaction_2_pathways_mapping, reaction_2_pathways_id_to_names = reaction_to_pathway(reaction_ids,
-                                                                                       species_list,
-                                                                                       metabolic_pathway_only)
+    reaction_2_pathways_mapping, reaction_2_pathways_id_to_names = reaction_to_pathway(
+        reaction_ids,
+        species_list,
+        metabolic_pathway_only)
     reaction_2_pathways = make_relations(reaction_2_pathways_mapping, REACTION_PK, PATHWAY_PK,
                                          value_key='pathway_id')
 
@@ -111,7 +123,8 @@ def reactome_mapping(observed_gene_df, observed_protein_df, observed_compound_df
     logger.info('Mapping reactions -> proteins')
     mapping, _ = reaction_to_uniprot(reaction_ids, species_list)
     reaction_2_proteins = make_relations(mapping, REACTION_PK, PROTEIN_PK, value_key=None)
-    protein_2_reactions = merge_relation(protein_2_reactions, reverse_relation(reaction_2_proteins))
+    protein_2_reactions = merge_relation(protein_2_reactions,
+                                         reverse_relation(reaction_2_proteins))
     all_protein_ids = protein_2_reactions.keys
 
     ### maps reactions -> compounds ###
@@ -120,10 +133,13 @@ def reactome_mapping(observed_gene_df, observed_protein_df, observed_compound_df
         use_kegg = True
     else:
         use_kegg = False
-    reaction_2_compounds_mapping, reaction_to_compound_id_to_names = reaction_to_compound(reaction_ids, species_list,
-                                                                                          use_kegg)
-    reaction_2_compounds = make_relations(reaction_2_compounds_mapping, REACTION_PK, COMPOUND_PK, value_key=None)
-    compound_2_reactions = merge_relation(compound_2_reactions, reverse_relation(reaction_2_compounds))
+    reaction_2_compounds_mapping, reaction_to_compound_id_to_names = reaction_to_compound(
+        reaction_ids, species_list,
+        use_kegg)
+    reaction_2_compounds = make_relations(reaction_2_compounds_mapping, REACTION_PK, COMPOUND_PK,
+                                          value_key=None)
+    compound_2_reactions = merge_relation(compound_2_reactions,
+                                          reverse_relation(reaction_2_compounds))
     all_compound_ids = compound_2_reactions.keys
 
     ### map proteins -> genes ###
@@ -151,23 +167,28 @@ def reactome_mapping(observed_gene_df, observed_protein_df, observed_compound_df
 
     # map proteins that have no reactions to NA
     protein_pk_list = [x for x in all_protein_ids if x not in protein_2_reactions.keys]
-    protein_2_reactions = add_links(protein_2_reactions, PROTEIN_PK, REACTION_PK, protein_pk_list, [NA])
+    protein_2_reactions = add_links(protein_2_reactions, PROTEIN_PK, REACTION_PK, protein_pk_list,
+                                    [NA])
 
     # map reactions that have no proteins to NA
     reaction_pk_list = [x for x in reaction_ids if x not in protein_2_reactions.values]
-    protein_2_reactions = add_links(protein_2_reactions, PROTEIN_PK, REACTION_PK, [NA], reaction_pk_list)
+    protein_2_reactions = add_links(protein_2_reactions, PROTEIN_PK, REACTION_PK, [NA],
+                                    reaction_pk_list)
 
     # map compounds that have no reactions to NA
     compound_pk_list = [x for x in all_compound_ids if x not in compound_2_reactions.keys]
-    compound_2_reactions = add_links(compound_2_reactions, COMPOUND_PK, REACTION_PK, compound_pk_list, [NA])
+    compound_2_reactions = add_links(compound_2_reactions, COMPOUND_PK, REACTION_PK,
+                                     compound_pk_list, [NA])
 
     # map reactions that have no compounds to NA
     reaction_pk_list = [x for x in reaction_ids if x not in compound_2_reactions.values]
-    compound_2_reactions = add_links(compound_2_reactions, COMPOUND_PK, REACTION_PK, [NA], reaction_pk_list)
+    compound_2_reactions = add_links(compound_2_reactions, COMPOUND_PK, REACTION_PK, [NA],
+                                     reaction_pk_list)
 
     # map reactions that have no pathways to NA
     reaction_pk_list = [x for x in reaction_ids if x not in reaction_2_pathways.keys]
-    reaction_2_pathways = add_links(reaction_2_pathways, REACTION_PK, PATHWAY_PK, reaction_pk_list, [NA])
+    reaction_2_pathways = add_links(reaction_2_pathways, REACTION_PK, PATHWAY_PK, reaction_pk_list,
+                                    [NA])
 
     GTF_DICT = load_obj(EXTERNAL_GENE_NAMES)
     metadata_map = get_gene_names(all_gene_ids, GTF_DICT)
@@ -176,14 +197,16 @@ def reactome_mapping(observed_gene_df, observed_protein_df, observed_compound_df
     gene_2_proteins_json = json.dumps(gene_2_proteins.mapping_list)
 
     # metadata_map = get_uniprot_metadata_online(uniprot_ids)
-    proteins_json = pk_to_json('protein_pk', 'protein_id', all_protein_ids, metadata_map, observed_protein_df,
+    proteins_json = pk_to_json('protein_pk', 'protein_id', all_protein_ids, metadata_map,
+                               observed_protein_df,
                                observed_ids=observed_protein_ids)
     protein_2_reactions_json = json.dumps(protein_2_reactions.mapping_list)
 
     # TODO: this feels like a very bad way to implement this
     # We need to deal with uploaded peak data from PiMP, which contains a lot of duplicate identifications per peak
     KEGG_ID_2_DISPLAY_NAMES = load_obj(EXTERNAL_COMPOUND_NAMES)
-    metadata_map = get_compound_metadata(all_compound_ids, KEGG_ID_2_DISPLAY_NAMES, reaction_to_compound_id_to_names)
+    metadata_map = get_compound_metadata(all_compound_ids, KEGG_ID_2_DISPLAY_NAMES,
+                                         reaction_to_compound_id_to_names)
     try:
         mapping = get_mapping(observed_compound_df)
     except KeyError:
@@ -191,7 +214,8 @@ def reactome_mapping(observed_gene_df, observed_protein_df, observed_compound_df
     except AttributeError:
         mapping = None
 
-    compounds_json = pk_to_json('compound_pk', 'compound_id', all_compound_ids, metadata_map, observed_compound_df,
+    compounds_json = pk_to_json('compound_pk', 'compound_id', all_compound_ids, metadata_map,
+                                observed_compound_df,
                                 observed_ids=observed_compound_ids, mapping=mapping)
     if mapping:
         compound_2_reactions = expand_relation(compound_2_reactions, mapping, 'compound_pk')
@@ -208,9 +232,11 @@ def reactome_mapping(observed_gene_df, observed_protein_df, observed_compound_df
     pathway_count_df = None
 
     pathway_ids = reaction_2_pathways.values
-    reactions_json = pk_to_json('reaction_pk', 'reaction_id', reaction_ids, metadata_map, reaction_count_df,
+    reactions_json = pk_to_json('reaction_pk', 'reaction_id', reaction_ids, metadata_map,
+                                reaction_count_df,
                                 has_species=True)
-    pathways_json = pk_to_json('pathway_pk', 'pathway_id', pathway_ids, metadata_map, pathway_count_df,
+    pathways_json = pk_to_json('pathway_pk', 'pathway_id', pathway_ids, metadata_map,
+                               pathway_count_df,
                                has_species=True)
     reaction_2_pathways_json = json.dumps(reaction_2_pathways.mapping_list)
 
@@ -257,13 +283,15 @@ def csv_to_dataframe(csv_str):
                                                       '_')  # replace dash with underscore to prevent alasql breaking
         data_df.columns = data_df.columns.str.replace('#', '')  # remove funny characters
         rename = {data_df.columns.values[0]: IDENTIFIER_COL}
-        for i in range(len(data_df.columns.values[1:])):  # sql doesn't like column names starting with a number
+        for i in range(len(data_df.columns.values[
+                           1:])):  # sql doesn't like column names starting with a number
             col_name = data_df.columns.values[i]
             if col_name[0].isdigit():
                 new_col_name = '_' + col_name  # append an underscore in front of the column name
                 rename[col_name] = new_col_name
         data_df = data_df.rename(columns=rename)
-        data_df.iloc[:, 0] = data_df.iloc[:, 0].astype(str)  # assume id is in the first column and is a string
+        data_df.iloc[:, 0] = data_df.iloc[:, 0].astype(
+            str)  # assume id is in the first column and is a string
         id_list = data_df.iloc[:, 0].values.tolist()
     except pd.errors.EmptyDataError:
         data_df = None
@@ -472,7 +500,8 @@ def merge_relation(r1, r2):
     unique_keys = list(set(r1.keys + r2.keys))
     unique_values = list(set(r1.values + r2.values))
     mapping_list = r1.mapping_list + r2.mapping_list
-    mapping_list = list(map(dict, set(map(lambda x: frozenset(x.items()), mapping_list))))  # removes duplicates, if any
+    mapping_list = list(map(dict, set(map(lambda x: frozenset(x.items()),
+                                          mapping_list))))  # removes duplicates, if any
     return Relation(keys=list(unique_keys), values=list(unique_values),
                     mapping_list=mapping_list)
 
@@ -526,12 +555,14 @@ def pk_to_json(pk_label, display_label, data, metadata_map, observed_df, has_spe
                observed_ids=None, mapping=None):
     if observed_df is not None:
         if PIMP_PEAK_ID_COL in observed_df.columns:  # if peak id is present, rename the identifier column to include it
-            observed_df[IDENTIFIER_COL] = observed_df[IDENTIFIER_COL] + '_' + observed_df[PIMP_PEAK_ID_COL].astype(str)
+            observed_df[IDENTIFIER_COL] = observed_df[IDENTIFIER_COL] + '_' + observed_df[
+                PIMP_PEAK_ID_COL].astype(str)
         if mapping is not None:
             data = expand_data(data, mapping)
 
         observed_df = observed_df.set_index(IDENTIFIER_COL)  # set identifier as index
-        observed_df = observed_df[~observed_df.index.duplicated(keep='first')]  # remove row with duplicate indices
+        observed_df = observed_df[
+            ~observed_df.index.duplicated(keep='first')]  # remove row with duplicate indices
         observed_df = observed_df.fillna(value=0)  # replace all NaNs with 0s
 
     output = []
@@ -687,3 +718,212 @@ def add_links(relation, source_pk_label, target_pk_label, source_pk_list, target
             if s2 not in rel_keys: rel_values.append(s2)
 
     return Relation(keys=rel_keys, values=rel_values, mapping_list=rel_mapping_list)
+
+
+def send_reactome_ora(ap, m, de_df, p_value_colname, p_value_thresh, fc_colname, fc_iqr_thresh,
+                      analysis_species, de_only=True):
+    connected_df, unique_mappable = get_unique_mappable(m)
+    unique_mappable_significant = get_unique_mappable_significant(ap, de_df, fc_colname,
+                                                                  fc_iqr_thresh, m,
+                                                                  p_value_colname, p_value_thresh,
+                                                                  unique_mappable)
+
+    to_send = unique_mappable_significant if de_only else unique_mappable
+    ora_data = to_ora_tsv(to_send)
+    encoded_species = quote(analysis_species)
+
+    ora_status_code, ora_json_response = send_to_reactome(ora_data, encoded_species)
+    assert ora_status_code == 200
+    assert ora_json_response is not None
+
+    pathways_df, ora_reactome_url, ora_token = parse_reactome_json(ora_json_response)
+    merged_pathway_df = pd.merge(connected_df.set_index('pathway_id'),
+                                 pathways_df.set_index('stId'),
+                                 left_index=True, right_index=True, how='inner')
+    ora_df = merged_pathway_df[
+        ['name', 'entities_found', 'entities_total', 'entities_pValue']].sort_values(
+        'entities_pValue')
+    return ora_df
+
+
+def get_unique_mappable_significant(ap, de_df, fc_colname, fc_iqr_thresh, m, p_value_colname,
+                                    p_value_thresh, unique_mappable):
+    fc_sort_order = 'desc'
+    sorted_df_desc = ap.de_sort_and_filter(de_df, p_value_colname, p_value_thresh, fc_colname,
+                                           fc_sort_order=fc_sort_order,
+                                           fc_iqr_thresh=fc_iqr_thresh)
+    new_mo = m.multi_omics_data
+    so = new_mo.get_data(COMPOUNDS)
+    merged_df = pd.merge(sorted_df_desc,
+                         so.feature_annot_df[['Analyte Class', 'Analyte Name', 'ChEBI']],
+                         left_index=True, right_index=True, how='left')
+    merged_df_filtered = merged_df[merged_df['ChEBI'].isin(unique_mappable)]
+    unique_mappable_significant = merged_df_filtered['ChEBI'].values.tolist()
+    return unique_mappable_significant
+
+
+def get_unique_mappable(m):
+    mappable = []
+    data = []
+    pathways = m.get_nodes(types=PATHWAYS)
+    for pathway_id, pathway_data in pathways:
+        pathway_name = pathway_data['display_name']
+        compounds = m.get_connected(pathway_id, dest_type=COMPOUNDS, observed=True)
+        if len(compounds) > 0:
+            mappable.extend(compounds.index.values.tolist())
+            row = [pathway_id, pathway_name, len(compounds)]
+            data.append(row)
+    connected_df = pd.DataFrame(data, columns=['pathway_id', 'pathway_name', 'num_compounds'])
+    unique_mappable = sorted(list(set(mappable)))
+    return connected_df, unique_mappable
+
+
+def send_reactome_expression(ap, m, de_df, p_value_colname, fc_colname,
+                             analysis_species, case_group, control_group, normalise=True):
+    fc_sort_order = 'desc'
+    sorted_df_desc = ap.de_sort_and_filter(de_df, p_value_colname, 1, fc_colname,
+                                           fc_sort_order=fc_sort_order,
+                                           fc_iqr_thresh=100)
+
+    connected_df, unique_mappable = get_unique_mappable(m)
+
+    new_mo = m.multi_omics_data
+    so = new_mo.get_data(COMPOUNDS)
+    expression_df = pd.merge(sorted_df_desc,
+                             so.feature_annot_df[['Analyte Class', 'Analyte Name', 'ChEBI']],
+                             left_index=True, right_index=True, how='left')
+    pval_col = f'padj_{case_group}_vs_{control_group}'
+    fc_col = f'FC_{case_group}_vs_{control_group}'
+
+    expression_df = expression_df.dropna(subset=['ChEBI'])
+    expression_df = expression_df.set_index('ChEBI')[[fc_col]]
+
+    # Duplicate related chebis
+
+    expression_df = expression_df.reset_index().rename(columns={'ChEBI': 'Identifier'})
+    expression_df = get_related_chebi(expression_df)
+    expression_df = expression_df.set_index('Identifier')
+
+    if normalise:
+
+        # scale features between (-1, 1) range
+        positiveFC = expression_df[fc_col] >= 0.0
+        if positiveFC.any():
+
+            data = expression_df.loc[positiveFC, [fc_col]]
+            # print('positive', data.shape)
+            positive_scaled_data = preprocessing.quantile_transform(
+                data, output_distribution='uniform', n_quantiles=data.shape[0])
+
+            # set scaled data back to the dataframe
+            expression_df.loc[positiveFC, fc_col] = positive_scaled_data.squeeze()
+
+        negativeFC = expression_df[fc_col] < 0.0
+        if negativeFC.any():
+            data = expression_df.loc[negativeFC, [fc_col]]
+            # print('negative', data.shape)
+            negative_scaled_data = preprocessing.quantile_transform(
+                data, output_distribution='uniform', n_quantiles=data.shape[0])
+
+            # set scaled data back to the dataframe
+            expression_df.loc[negativeFC, fc_col] = negative_scaled_data.squeeze() - 1.0
+
+    expression_data = to_expression_tsv(expression_df)
+    encoded_species = quote(analysis_species)
+    expr_status_code, expr_json_response = send_to_reactome(expression_data, encoded_species)
+    assert expr_status_code == 200
+    assert expr_json_response is not None
+
+    token = expr_json_response['summary']['token']
+    return expression_df, token
+
+
+def to_ora_tsv(entities):
+    data = '#id\n'
+    data += '\n'.join(entities)
+    return data
+
+
+def to_expression_tsv(df):
+    # convert dataframe to tab-separated values
+    # first column in the header has to start with a '#' sign
+    # can't use scientific notation, so we format to %.15f
+    data = df.to_csv(sep='\t', header=True, index_label='#id', float_format='%.15f')
+    return data
+
+
+def send_to_reactome(data, encoded_species):
+    # refer to https://reactome.org/AnalysisService/#/identifiers/getPostTextUsingPOST
+    url = 'https://reactome.org/AnalysisService/identifiers/?interactors=false&species=' + encoded_species + \
+          '&sortBy=ENTITIES_PVALUE&order=ASC&resource=TOTAL&pValue=1&includeDisease=true'
+    logger.debug('Reactome URL: ' + url)
+
+    # make a POSt request to Reactome Analysis service
+    response = requests.post(url, headers={'Content-Type': 'text/plain'},
+                             data=data.encode('utf-8'))
+    logger.debug('Response status code = %d' % response.status_code)
+
+    status_code = response.status_code
+    if status_code == 200:
+        json_response = json.loads(response.text)
+    else:
+        json_response = None
+        print(response.text)
+    return status_code, json_response
+
+
+def parse_reactome_json(json_response):
+    # see https://reactome.org/userguide/analysis for results explanation
+    token = json_response['summary']['token']
+    pathways = json_response['pathways']
+
+    reactome_url = 'https://reactome.org/PathwayBrowser/#DTAB=AN&ANALYSIS=' + token
+    logger.debug('Pathway analysis token: ' + token)
+    logger.debug('Pathway analysis URL: ' + reactome_url)
+
+    # https://stackoverflow.com/questions/6027558/flatten-nested-dictionaries-compressing-keys
+    pathways_df = pd.json_normalize(pathways, sep='_')
+    return pathways_df, reactome_url, token
+
+def display_reactome_image(pathway_name, token):
+    # Image URL
+    quality = 7
+    analysis_profile = 'strosobar'
+    diagram_profile = 'standard'
+    url = f"https://reactome.org/ContentService/exporter/diagram/{pathway_name}.jpg?quality={quality}&" \
+          f"token={token}&analysisProfile={analysis_profile}&diagramProfile={diagram_profile}"
+
+    # Download the image data into memory
+    with urllib.request.urlopen(url) as response:
+        image_data = response.read()
+
+    # Open the image using PIL
+    image = PIL_Image.open(io.BytesIO(image_data))
+
+    # Get the width and height of the image
+    width, height = image.size
+    # print('original', width, height)
+
+    # Determine if the image is too wide compared to its height
+    threshold = 3
+    if width > height * threshold:
+        # Calculate new dimensions while maintaining aspect ratio
+        new_width = width // 4
+        new_height = int(height * (new_width / width))
+        # print('resized', new_width, new_height)
+
+        # Resize the image
+        image = image.resize((new_width, new_height), PIL_Image.ANTIALIAS)
+
+    # Display the processed image in the Jupyter Notebook
+    with io.BytesIO() as output:
+        image.save(output, format="JPEG")
+        display(PIL_Image.open(io.BytesIO(output.getvalue())))
+
+
+def show_ora_pathways(ora_df, token, N=5):
+    selected_pathways = ora_df.index.values[0:N]
+    for pathway_name in selected_pathways:
+        url = f'https://reactome.org/PathwayBrowser/#/{pathway_name}&DTAB=AN&ANALYSIS={token}'
+        print(url)
+        display_reactome_image(pathway_name, token)

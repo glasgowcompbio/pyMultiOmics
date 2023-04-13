@@ -23,6 +23,10 @@ def main(args):
     input_excel = os.path.abspath(args.input_excel)
     print('Input Excel:', input_excel)
 
+    # annotation CSV
+    annot_csv = os.path.abspath(args.annot_csv)
+    print('Annotation CSV:', annot_csv)
+
     # config file
     config_file = os.path.abspath(args.config_file)
     print('Config file:', config_file)
@@ -32,6 +36,7 @@ def main(args):
     print(yaml.dump(processing_params, indent=4))
     params = {}
     params['file_name'] = input_excel
+    params['annot_csv'] = annot_csv
     params.update(processing_params)
 
     # output dir
@@ -84,6 +89,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(
         description='Runs a notebook-based analysis on input data and saves the results as a PDF.')
     parser.add_argument('--input_excel', required=True, help='Path to the input Excel file.')
+    parser.add_argument('--annot_csv', required=True, help='Path to the annotation CSV file.')
     parser.add_argument('--output_dir', required=True, help='Path to the output directory.')
     parser.add_argument('--config_file', required=True, help='Path to the YAML configuration file.')
     args = parser.parse_args()
